@@ -52082,15 +52082,11 @@ var _Dimensions = require(159         ); // 159 = Dimensions
 
 var _Dimensions2 = babelHelpers.interopRequireDefault(_Dimensions);
 
-var _reactNativeBleManager = require(312                       ); // 312 = react-native-ble-manager
-
-var _reactNativeBleManager2 = babelHelpers.interopRequireDefault(_reactNativeBleManager);
-
 var _reactTimerMixin = require(191                ); // 191 = react-timer-mixin
 
 var _reactTimerMixin2 = babelHelpers.interopRequireDefault(_reactTimerMixin);
 
-var _reactMixin = require(313          ); // 313 = react-mixin
+var _reactMixin = require(312          ); // 312 = react-mixin
 
 var _reactMixin2 = babelHelpers.interopRequireDefault(_reactMixin);
 
@@ -52099,8 +52095,16 @@ var ds = new _reactNative.ListView.DataSource({ rowHasChanged: function rowHasCh
         return r1 !== r2;
     } });
 
-var BleManagerModule = _reactNative.NativeModules.BleManager;
-var bleManagerEmitter = new _reactNative.NativeEventEmitter(BleManagerModule);
+var noble = require(315               ); // 315 = react-native-ble
+
+var defaultState = {
+    scanning: false,
+    peripherals: new Map(),
+    notify: false,
+    peripheralUuid: null };
+
+var serviceUUIDs = ['0000ec0000001000800000805f9b34fb'];
+var characteristicUUIDs = ['ec0e'];
 
 var App = function (_Component) {
     babelHelpers.inherits(App, _Component);
@@ -52110,39 +52114,46 @@ var App = function (_Component) {
 
         var _this = babelHelpers.possibleConstructorReturn(this, (App.__proto__ || Object.getPrototypeOf(App)).call(this));
 
-        _this.state = {
-            scanning: false,
-            peripherals: new Map(),
-            notify: false
-        };
+        _this.state = defaultState;
 
-        _this.handleDiscoverPeripheral = _this.handleDiscoverPeripheral.bind(_this);
-        _this.handleStopScan = _this.handleStopScan.bind(_this);
-        _this.handleUpdateValueForCharacteristic = _this.handleUpdateValueForCharacteristic.bind(_this);
-        _this.handleDisconnectedPeripheral = _this.handleDisconnectedPeripheral.bind(_this);
         return _this;
     }
 
     babelHelpers.createClass(App, [{
         key: 'componentDidMount',
         value: function componentDidMount() {
-            _reactNativeBleManager2.default.start({ showAlert: false, allowDuplicates: false });
+            this.showMessage("componentDidMount");
+            this.checkPermission();
+            this.setListeners();
+        }
+    }, {
+        key: 'setListeners',
+        value: function setListeners() {
+            var _this2 = this;
 
-            this.handlerDiscover = bleManagerEmitter.addListener('BleManagerDiscoverPeripheral', this.handleDiscoverPeripheral);
-            this.handlerStop = bleManagerEmitter.addListener('BleManagerStopScan', this.handleStopScan);
-            this.handlerDisconnect = bleManagerEmitter.addListener('BleManagerDisconnectPeripheral', this.handleDisconnectedPeripheral);
-            this.handlerUpdate = bleManagerEmitter.addListener('BleManagerDidUpdateValueForCharacteristic', this.handleUpdateValueForCharacteristic);
+            noble.on('scanStart', this.onScanStarted.bind(this));
+            noble.on('scanStop', this.onScanStopped.bind(this));
+            noble.on('stateChange', this.onStateChanged.bind(this));
+            noble.on('discover', this.onPeriferalDiscovered.bind(this));
+            noble.on('warning', function (message) {
+                _this2.showMessage("Warning : " + message);
+            });
+        }
+    }, {
+        key: 'checkPermission',
+        value: function checkPermission() {
+            var _this3 = this;
 
             if (_reactNative.Platform.OS === 'android' && _reactNative.Platform.Version >= 23) {
                 _reactNative.PermissionsAndroid.check(_reactNative.PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION).then(function (result) {
                     if (result) {
-                        console.log("Permission is OK");
+                        _this3.showMessage("Permission is OK");
                     } else {
                         _reactNative.PermissionsAndroid.requestPermission(_reactNative.PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION).then(function (result) {
                             if (result) {
-                                console.log("User accept");
+                                _this3.showMessage("User accept");
                             } else {
-                                console.log("User refuse");
+                                _this3.showMessage("User refuse");
                             }
                         });
                     }
@@ -52150,166 +52161,12 @@ var App = function (_Component) {
             }
         }
     }, {
-        key: 'componentWillUnmount',
-        value: function componentWillUnmount() {
-            this.handlerDiscover.remove();
-            this.handlerStop.remove();
-            this.handlerDisconnect.remove();
-            this.handlerUpdate.remove();
-        }
-    }, {
-        key: 'handleDisconnectedPeripheral',
-        value: function handleDisconnectedPeripheral(data) {
-            var peripherals = this.state.peripherals;
-            var peripheral = peripherals.get(data.peripheral);
-            if (peripheral) {
-                peripheral.connected = false;
-                peripherals.set(peripheral.id, peripheral);
-                this.setState({ peripherals: peripherals });
-            }
-            this.showMessage('Disconnected from ' + data.peripheral);
-        }
-    }, {
-        key: 'handleUpdateValueForCharacteristic',
-        value: function handleUpdateValueForCharacteristic(data) {
-            console.log('Received data from ' + data.peripheral + ' characteristic ' + data.characteristic, data.value);
-        }
-    }, {
-        key: 'handleStopScan',
-        value: function handleStopScan() {
-            this.showMessage('Scan is stopped');
-            this.setState({ scanning: false, notify: false });
-        }
-    }, {
-        key: 'startScan',
-        value: function startScan() {
-            var _this2 = this;
-
-            if (!this.state.scanning) {
-                _reactNativeBleManager2.default.scan([], 10, true).then(function (results) {
-                    _this2.showMessage('Scanning...');
-                    _this2.setState({ scanning: true });
-                });
-            }
-        }
-    }, {
-        key: 'handleDiscoverPeripheral',
-        value: function handleDiscoverPeripheral(peripheral) {
-            var peripherals = this.state.peripherals;
-            if (!peripherals.has(peripheral.id)) {
-                console.log('Got ble peripheral', peripheral);
-                peripherals.set(peripheral.id, peripheral);
-                this.setState({ peripherals: peripherals });
-            }
-        }
-    }, {
-        key: 'test',
-        value: function test(peripheral) {
-            var _this3 = this;
-
-            this.selectedPeriferal = peripheral;
-            if (peripheral) {
-                if (peripheral.connected) {
-                    _reactNativeBleManager2.default.disconnect(peripheral.id);
-                } else {
-                    _reactNativeBleManager2.default.connect(peripheral.id).then(function () {
-                        var peripherals = _this3.state.peripherals;
-                        var p = peripherals.get(peripheral.id);
-                        if (p) {
-                            p.connected = true;
-                            peripherals.set(peripheral.id, p);
-                            _this3.setState({ peripherals: peripherals });
-                        }
-                        _this3.showMessage('Connected to ' + peripheral.id + ' (' + peripheral.name + ')');
-
-                        _this3.setTimeout(function () {
-
-                            _reactNativeBleManager2.default.retrieveServices(peripheral.id).then(function (peripheralData) {
-                                console.log('Retrieved peripheral services', peripheralData);
-
-                                _reactNativeBleManager2.default.readRSSI(peripheral.id).then(function (rssi) {
-                                    _this3.showMessage('Retrieved actual RSSI value', rssi);
-                                });
-                            });
-                        }, 900);
-                    }).catch(function (error) {
-                        _this3.showMessage('Connection error', error);
-                    });
-                }
-            }
-        }
-    }, {
-        key: 'showMessage',
-        value: function showMessage(msg) {
-            console.log(msg);
-            _reactNative.ToastAndroid.showWithGravity(msg, _reactNative.ToastAndroid.SHORT, _reactNative.ToastAndroid.BOTTOM);
-        }
-    }, {
-        key: 'startRead',
-        value: function startRead() {
-            var _this4 = this;
-
-            if (this.selectedPeriferal) {
-
-                _reactNativeBleManager2.default.read(this.selectedPeriferal.id, '180D', '2A38').then(function (readData) {
-                    console.log('Read: ' + readData);
-                }).catch(function (error) {
-                    _this4.showMessage(error);
-                });
-            } else {
-                this.showMessage("Periferal is not selected.");
-            }
-        }
-    }, {
-        key: 'startWrite',
-        value: function startWrite() {
-            var _this5 = this;
-
-            if (this.selectedPeriferal) {
-                var messages = [[0, 7, 2, 52, 2, 19, 181], [0, 7, 2, 103, 2, 47, 69], [0, 7, 2, 32, 2, 28, 181], [0, 7, 2, 120, 2, 39, 117]];
-                var message = messages[Math.floor(Math.random() * 3)];
-
-                console.log(message);
-                _reactNativeBleManager2.default.write(this.selectedPeriferal.id, '180D', '2A39', message, 6).then(function () {
-                    _this5.showMessage('Write confirmed');
-                }).catch(function (error) {
-                    _this5.showMessage(error);
-                });
-            } else {
-                this.showMessage("Periferal is not selected.");
-            }
-        }
-    }, {
         key: 'startNotify',
-        value: function startNotify() {
-            var _this6 = this;
-
-            if (this.selectedPeriferal) {
-                if (!this.state.notify) {
-                    _reactNativeBleManager2.default.startNotification(this.selectedPeriferal.id, '180D', '2A37').then(function () {
-                        _this6.showMessage('Started notification on ' + _this6.selectedPeriferal.id);
-                        _this6.setState({ notify: true });
-                    }).catch(function (error) {
-                        _this6.showMessage('Notification error', error);
-                        _this6.setState({ notify: false });
-                    });
-                } else {
-                    _reactNativeBleManager2.default.stopNotification(this.selectedPeriferal.id, '180D', '2A37').then(function () {
-                        _this6.showMessage('Notification turned off ' + _this6.selectedPeriferal.id);
-                        _this6.setState({ notify: false });
-                    }).catch(function (error) {
-                        _this6.showMessage('Notification error', error);
-                        _this6.setState({ notify: false });
-                    });
-                }
-            } else {
-                this.showMessage("Periferal is not selected.");
-            }
-        }
+        value: function startNotify() {}
     }, {
         key: 'render',
         value: function render() {
-            var _this7 = this;
+            var _this4 = this;
 
             var list = Array.from(this.state.peripherals.values());
             var dataSource = ds.cloneWithRows(list);
@@ -52318,17 +52175,17 @@ var App = function (_Component) {
                 _reactNative.View,
                 { style: styles.container, __source: {
                         fileName: _jsxFileName,
-                        lineNumber: 294
+                        lineNumber: 106
                     }
                 },
                 _react2.default.createElement(
                     _reactNative.TouchableHighlight,
                     { style: { marginTop: 40, margin: 20, padding: 20, backgroundColor: '#ccc' },
                         onPress: function onPress() {
-                            return _this7.startScan();
+                            return _this4.startStopScan();
                         }, __source: {
                             fileName: _jsxFileName,
-                            lineNumber: 295
+                            lineNumber: 107
                         }
                     },
                     _react2.default.createElement(
@@ -52336,7 +52193,7 @@ var App = function (_Component) {
                         {
                             __source: {
                                 fileName: _jsxFileName,
-                                lineNumber: 297
+                                lineNumber: 109
                             }
                         },
                         'Scan Bluetooth (',
@@ -52348,17 +52205,17 @@ var App = function (_Component) {
                     _reactNative.View,
                     { style: { flexDirection: 'row' }, __source: {
                             fileName: _jsxFileName,
-                            lineNumber: 300
+                            lineNumber: 112
                         }
                     },
                     _react2.default.createElement(
                         _reactNative.TouchableHighlight,
                         { style: { marginTop: 40, margin: 20, padding: 20, backgroundColor: '#ccc' },
                             onPress: function onPress() {
-                                return _this7.startRead();
+                                return _this4.startRead();
                             }, __source: {
                                 fileName: _jsxFileName,
-                                lineNumber: 302
+                                lineNumber: 114
                             }
                         },
                         _react2.default.createElement(
@@ -52366,7 +52223,7 @@ var App = function (_Component) {
                             {
                                 __source: {
                                     fileName: _jsxFileName,
-                                    lineNumber: 304
+                                    lineNumber: 116
                                 }
                             },
                             'Read'
@@ -52376,10 +52233,10 @@ var App = function (_Component) {
                         _reactNative.TouchableHighlight,
                         { style: { marginTop: 40, margin: 20, padding: 20, backgroundColor: '#ccc' },
                             onPress: function onPress() {
-                                return _this7.startWrite();
+                                return _this4.startWrite();
                             }, __source: {
                                 fileName: _jsxFileName,
-                                lineNumber: 307
+                                lineNumber: 119
                             }
                         },
                         _react2.default.createElement(
@@ -52387,7 +52244,7 @@ var App = function (_Component) {
                             {
                                 __source: {
                                     fileName: _jsxFileName,
-                                    lineNumber: 309
+                                    lineNumber: 121
                                 }
                             },
                             'Write'
@@ -52397,10 +52254,10 @@ var App = function (_Component) {
                         _reactNative.TouchableHighlight,
                         { style: { marginTop: 40, margin: 20, padding: 20, backgroundColor: '#ccc' },
                             onPress: function onPress() {
-                                return _this7.startNotify();
+                                return _this4.startNotify();
                             }, __source: {
                                 fileName: _jsxFileName,
-                                lineNumber: 312
+                                lineNumber: 124
                             }
                         },
                         _react2.default.createElement(
@@ -52408,7 +52265,7 @@ var App = function (_Component) {
                             {
                                 __source: {
                                     fileName: _jsxFileName,
-                                    lineNumber: 314
+                                    lineNumber: 126
                                 }
                             },
                             'Notify (',
@@ -52421,21 +52278,21 @@ var App = function (_Component) {
                     _reactNative.ScrollView,
                     { style: styles.scroll, __source: {
                             fileName: _jsxFileName,
-                            lineNumber: 320
+                            lineNumber: 132
                         }
                     },
                     list.length == 0 && _react2.default.createElement(
                         _reactNative.View,
                         { style: { flex: 1, margin: 20 }, __source: {
                                 fileName: _jsxFileName,
-                                lineNumber: 322
+                                lineNumber: 134
                             }
                         },
                         _react2.default.createElement(
                             _reactNative.Text,
                             { style: { textAlign: 'center' }, __source: {
                                     fileName: _jsxFileName,
-                                    lineNumber: 323
+                                    lineNumber: 135
                                 }
                             },
                             'No peripherals'
@@ -52443,24 +52300,27 @@ var App = function (_Component) {
                     ),
                     _react2.default.createElement(_reactNative.FlatList, {
                         data: list,
+                        keyExtractor: function keyExtractor(item, index) {
+                            return index;
+                        },
                         renderItem: function renderItem(_ref) {
                             var item = _ref.item;
 
-                            var color = item.connected ? 'green' : '#fff';
+                            var color = item.state === 'connected' ? 'green' : '#fff';
                             return _react2.default.createElement(
                                 _reactNative.TouchableHighlight,
                                 { onPress: function onPress() {
-                                        return _this7.test(item);
+                                        return _this4.onItemClick(item);
                                     }, __source: {
                                         fileName: _jsxFileName,
-                                        lineNumber: 331
+                                        lineNumber: 144
                                     }
                                 },
                                 _react2.default.createElement(
                                     _reactNative.View,
                                     { style: [styles.row, { backgroundColor: color }], __source: {
                                             fileName: _jsxFileName,
-                                            lineNumber: 332
+                                            lineNumber: 145
                                         }
                                     },
                                     _react2.default.createElement(
@@ -52472,10 +52332,10 @@ var App = function (_Component) {
                                                 padding: 10
                                             }, __source: {
                                                 fileName: _jsxFileName,
-                                                lineNumber: 333
+                                                lineNumber: 146
                                             }
                                         },
-                                        item.name
+                                        item.advertisement.localName
                                     ),
                                     _react2.default.createElement(
                                         _reactNative.Text,
@@ -52486,7 +52346,7 @@ var App = function (_Component) {
                                                 padding: 10
                                             }, __source: {
                                                 fileName: _jsxFileName,
-                                                lineNumber: 339
+                                                lineNumber: 152
                                             }
                                         },
                                         item.id
@@ -52496,11 +52356,176 @@ var App = function (_Component) {
                         },
                         __source: {
                             fileName: _jsxFileName,
-                            lineNumber: 326
+                            lineNumber: 138
                         }
                     })
                 )
             );
+        }
+    }, {
+        key: 'onPeriferalDiscovered',
+        value: function onPeriferalDiscovered(peripheral) {
+            this.updatePeripheral(peripheral);
+            this.showMessage('discover: ' + peripheral);
+        }
+    }, {
+        key: 'componentWillUnmount',
+        value: function componentWillUnmount() {
+            this.showMessage("componentWillUnmount");
+        }
+    }, {
+        key: 'showMessage',
+        value: function showMessage(msg) {
+            var showToast = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : false;
+
+            console.log(msg);
+            if (showToast) _reactNative.ToastAndroid.showWithGravity(msg, _reactNative.ToastAndroid.SHORT, _reactNative.ToastAndroid.BOTTOM);
+        }
+    }, {
+        key: 'disconnectPeripheral',
+        value: function disconnectPeripheral(peripheral) {
+            var _this5 = this;
+
+            this.showMessage("disconnectPeripheral " + peripheral.id);
+            peripheral.once('disconnect', function (error) {
+                if (error) {
+                    _this5.showMessage('peripheral.disconnected error: ');
+                    _this5.showMessage(error);
+                    return;
+                }
+                _this5.showMessage('peripheral.disconnected: ' + peripheral.address);
+                _this5.updatePeripheral(peripheral);
+            });
+            peripheral.disconnect();
+        }
+    }, {
+        key: 'setCurrentPeripheral',
+        value: function setCurrentPeripheral(peripheralUuid) {
+            this.setState({ peripheralUuid: peripheralUuid });
+        }
+    }, {
+        key: 'getCurrentPeripheral',
+        value: function getCurrentPeripheral() {
+            return this.state.peripherals.get(this.state.peripheralUuid);
+        }
+    }, {
+        key: 'connectPeripheral',
+        value: function connectPeripheral(peripheral) {
+            var _this6 = this;
+
+            this.showMessage("connectPeripheral " + peripheral.id);
+            peripheral.once('connect', function (error) {
+                if (error) {
+                    _this6.showMessage('peripheral.connect error: ');
+                    _this6.showMessage(error);
+                    return;
+                }
+                _this6.setCurrentPeripheral(peripheral.id);
+                _this6.showMessage('peripheral.connect: ' + peripheral.address);
+                _this6.updatePeripheral(peripheral);
+                peripheral.discoverServices();
+            });
+            peripheral.once('servicesDiscover', function (services) {
+                _this6.onServicesDiscovered(peripheral, services);
+            });
+            peripheral.once('rssiUpdate', function (rssi) {
+                this.showMessage('--- rssiUpdate ' + rssi);
+            });
+            peripheral.connect();
+        }
+    }, {
+        key: 'discoverAllServiceAndCharacteristics',
+        value: function discoverAllServiceAndCharacteristics(peripheral) {
+            var _this7 = this;
+
+            peripheral.discoverAllServicesAndCharacteristics(function (error, services, characteristics) {
+                _this7.showMessage(services.length + ' services discovered!!!! for ' + peripheral.id);
+                _this7.showMessage(characteristics.length + ' characteristics discovered!!!! for ' + peripheral.id);
+            });
+        }
+    }, {
+        key: 'onServicesDiscovered',
+        value: function onServicesDiscovered(peripheral, services) {
+            var _this8 = this;
+
+            this.showMessage(services.length + ' services discovered!!!! for ' + peripheral.id);
+            var serviceUUIDs = ['0000ec0000001000800000805f9b34fb'];
+
+            var service = services[2];
+            if (service) {
+                this.showMessage("Found proper service");
+                service.discoverCharacteristics([], function (error, characteristics) {
+                    _this8.showMessage('  ---- number of characteristics = ' + characteristics.length + ',   ' + service.uuid);
+                    characteristics.forEach(function (c) {
+                        var uuid = c.uuid;
+                        if (uuid == characteristicUUIDs[0]) {
+                                _this8.showMessage('     --- Matched our desired uuid!\n');
+                            }
+                    });
+                });
+            }
+        }
+    }, {
+        key: 'findService',
+        value: function findService(peripheral, serviceUUID) {
+            var service = void 0;
+            for (var i = 0; i < peripheral.services.length; i++) {
+                var srv = peripheral.services[i];
+                var uuid = srv.uuid;
+                this.showMessage("Checking service uuid " + uuid);
+                if (uuid === serviceUUID) {
+                    service = srv;
+                    break;
+                }
+            }
+            return service;
+        }
+    }, {
+        key: 'updatePeripheral',
+        value: function updatePeripheral(peripheral) {
+            this.showMessage("updatePeripheral");
+            var peripherals = this.state.peripherals;
+            peripherals.set(peripheral.id, peripheral);
+            this.setState(peripherals);
+        }
+    }, {
+        key: 'onItemClick',
+        value: function onItemClick(peripheral) {
+            if (peripheral) {
+                if (peripheral.state === 'connected') {
+                    this.disconnectPeripheral(peripheral);
+                } else {
+                    this.connectPeripheral(peripheral);
+                }
+            }
+        }
+    }, {
+        key: 'startStopScan',
+        value: function startStopScan() {
+            if (!this.state.scanning) {
+                noble.startScanning();
+            } else {
+                noble.stopScanning();
+            }
+        }
+    }, {
+        key: 'onScanStarted',
+        value: function onScanStarted() {
+            this.showMessage("onScanStarted");
+            this.state.peripherals.clear();
+            this.setState({ scanning: true });
+            setTimeout(this.startStopScan.bind(this), 2000);
+        }
+    }, {
+        key: 'onScanStopped',
+        value: function onScanStopped() {
+            this.showMessage("onScanStopped");
+            this.setState({ scanning: false });
+        }
+    }, {
+        key: 'onStateChanged',
+        value: function onStateChanged(state) {
+            this.showMessage("onStateChanged => " + state);
         }
     }]);
     return App;
@@ -52527,290 +52552,8 @@ var styles = _reactNative.StyleSheet.create({
     }
 });
 }, 311, null, "ble/App.js");
-__d(/* react-native-ble-manager/BleManager.js */function(global, require, module, exports) {'use strict';
-
-var React = require(26            ); // 26 = react-native
-var bleManager = React.NativeModules.BleManager;
-
-var BleManager = function () {
-  function BleManager() {
-    babelHelpers.classCallCheck(this, BleManager);
-
-    this.isPeripheralConnected = this.isPeripheralConnected.bind(this);
-  }
-
-  babelHelpers.createClass(BleManager, [{
-    key: 'read',
-    value: function read(peripheralId, serviceUUID, characteristicUUID) {
-      return new Promise(function (fulfill, reject) {
-        bleManager.read(peripheralId, serviceUUID, characteristicUUID, function (error, data) {
-          if (error) {
-            reject(error);
-          } else {
-            fulfill(data);
-          }
-        });
-      });
-    }
-  }, {
-    key: 'readRSSI',
-    value: function readRSSI(peripheralId) {
-      return new Promise(function (fulfill, reject) {
-        bleManager.readRSSI(peripheralId, function (error, rssi) {
-          if (error) {
-            reject(error);
-          } else {
-            fulfill(rssi);
-          }
-        });
-      });
-    }
-  }, {
-    key: 'retrieveServices',
-    value: function retrieveServices(peripheralId) {
-      return new Promise(function (fulfill, reject) {
-        bleManager.retrieveServices(peripheralId, function (error, peripheral) {
-          if (error) {
-            reject(error);
-          } else {
-            fulfill(peripheral);
-          }
-        });
-      });
-    }
-  }, {
-    key: 'write',
-    value: function write(peripheralId, serviceUUID, characteristicUUID, data, maxByteSize) {
-      if (maxByteSize == null) {
-        maxByteSize = 20;
-      }
-      return new Promise(function (fulfill, reject) {
-        bleManager.write(peripheralId, serviceUUID, characteristicUUID, data, maxByteSize, function (error) {
-          if (error) {
-            reject(error);
-          } else {
-            fulfill();
-          }
-        });
-      });
-    }
-  }, {
-    key: 'writeWithoutResponse',
-    value: function writeWithoutResponse(peripheralId, serviceUUID, characteristicUUID, data, maxByteSize, queueSleepTime) {
-      if (maxByteSize == null) {
-        maxByteSize = 20;
-      }
-      if (queueSleepTime == null) {
-        queueSleepTime = 10;
-      }
-      return new Promise(function (fulfill, reject) {
-        bleManager.writeWithoutResponse(peripheralId, serviceUUID, characteristicUUID, data, maxByteSize, queueSleepTime, function (error) {
-          if (error) {
-            reject(error);
-          } else {
-            fulfill();
-          }
-        });
-      });
-    }
-  }, {
-    key: 'connect',
-    value: function connect(peripheralId) {
-      return new Promise(function (fulfill, reject) {
-        bleManager.connect(peripheralId, function (error) {
-          if (error) {
-            reject(error);
-          } else {
-            fulfill();
-          }
-        });
-      });
-    }
-  }, {
-    key: 'disconnect',
-    value: function disconnect(peripheralId) {
-      return new Promise(function (fulfill, reject) {
-        bleManager.disconnect(peripheralId, function (error) {
-          if (error) {
-            reject(error);
-          } else {
-            fulfill();
-          }
-        });
-      });
-    }
-  }, {
-    key: 'startNotification',
-    value: function startNotification(peripheralId, serviceUUID, characteristicUUID) {
-      return new Promise(function (fulfill, reject) {
-        bleManager.startNotification(peripheralId, serviceUUID, characteristicUUID, function (error) {
-          if (error) {
-            reject(error);
-          } else {
-            fulfill();
-          }
-        });
-      });
-    }
-  }, {
-    key: 'stopNotification',
-    value: function stopNotification(peripheralId, serviceUUID, characteristicUUID) {
-      return new Promise(function (fulfill, reject) {
-        bleManager.stopNotification(peripheralId, serviceUUID, characteristicUUID, function (error) {
-          if (error) {
-            reject(error);
-          } else {
-            fulfill();
-          }
-        });
-      });
-    }
-  }, {
-    key: 'checkState',
-    value: function checkState() {
-      bleManager.checkState();
-    }
-  }, {
-    key: 'start',
-    value: function start(options) {
-      return new Promise(function (fulfill, reject) {
-        if (options == null) {
-          options = {};
-        }
-        bleManager.start(options, function (error) {
-          if (error) {
-            reject(error);
-          } else {
-            fulfill();
-          }
-        });
-      });
-    }
-  }, {
-    key: 'scan',
-    value: function scan(serviceUUIDs, seconds, allowDuplicates) {
-      var scanningOptions = arguments.length > 3 && arguments[3] !== undefined ? arguments[3] : {};
-
-      return new Promise(function (fulfill, reject) {
-        if (allowDuplicates == null) {
-          allowDuplicates = false;
-        }
-
-        if (scanningOptions.numberOfMatches == null) {
-          scanningOptions.numberOfMatches = 3;
-        }
-
-        if (scanningOptions.matchMode == null) {
-          scanningOptions.matchMode = 1;
-        }
-
-        if (scanningOptions.scanMode == null) {
-          scanningOptions.scanMode = 0;
-        }
-
-        bleManager.scan(serviceUUIDs, seconds, allowDuplicates, scanningOptions, function (error) {
-          if (error) {
-            reject(error);
-          } else {
-            fulfill();
-          }
-        });
-      });
-    }
-  }, {
-    key: 'stopScan',
-    value: function stopScan() {
-      return new Promise(function (fulfill, reject) {
-        bleManager.stopScan(function (error) {
-          if (error != null) {
-            reject(error);
-          } else {
-            fulfill();
-          }
-        });
-      });
-    }
-  }, {
-    key: 'enableBluetooth',
-    value: function enableBluetooth() {
-      return new Promise(function (fulfill, reject) {
-        bleManager.enableBluetooth(function (error) {
-          if (error != null) {
-            reject(error);
-          } else {
-            fulfill();
-          }
-        });
-      });
-    }
-  }, {
-    key: 'getConnectedPeripherals',
-    value: function getConnectedPeripherals(serviceUUIDs) {
-      return new Promise(function (fulfill, reject) {
-        bleManager.getConnectedPeripherals(serviceUUIDs, function (error, result) {
-          if (error) {
-            reject(error);
-          } else {
-            if (result != null) {
-              fulfill(result);
-            } else {
-              fulfill([]);
-            }
-          }
-        });
-      });
-    }
-  }, {
-    key: 'getDiscoveredPeripherals',
-    value: function getDiscoveredPeripherals() {
-      return new Promise(function (fulfill, reject) {
-        bleManager.getDiscoveredPeripherals(function (error, result) {
-          if (error) {
-            reject(error);
-          } else {
-            if (result != null) {
-              fulfill(result);
-            } else {
-              fulfill([]);
-            }
-          }
-        });
-      });
-    }
-  }, {
-    key: 'removePeripheral',
-    value: function removePeripheral(peripheralId) {
-      return new Promise(function (fulfill, reject) {
-        bleManager.removePeripheral(peripheralId, function (error) {
-          if (error) {
-            reject(error);
-          } else {
-            fulfill();
-          }
-        });
-      });
-    }
-  }, {
-    key: 'isPeripheralConnected',
-    value: function isPeripheralConnected(peripheralId, serviceUUIDs) {
-      return this.getConnectedPeripherals(serviceUUIDs).then(function (result) {
-        if (result.find(function (p) {
-          return p.id === peripheralId;
-        })) {
-          return true;
-        } else {
-          return false;
-        }
-      });
-    }
-  }]);
-  return BleManager;
-}();
-
-module.exports = new BleManager();
-}, 312, null, "react-native-ble-manager/BleManager.js");
-__d(/* react-mixin/index.js */function(global, require, module, exports) {var mixin = require(314          ); // 314 = smart-mixin
-var assign = require(315            ); // 315 = object-assign
+__d(/* react-mixin/index.js */function(global, require, module, exports) {var mixin = require(313          ); // 313 = smart-mixin
+var assign = require(314            ); // 314 = object-assign
 
 var mixinProto = mixin({
   componentDidMount: mixin.MANY,
@@ -52967,7 +52710,7 @@ module.exports = function () {
 
   return reactMixin;
 }();
-}, 313, null, "react-mixin/index.js");
+}, 312, null, "react-mixin/index.js");
 __d(/* smart-mixin/index.js */function(global, require, module, exports) {var objToStr = function objToStr(x) {
     return Object.prototype.toString.call(x);
 };
@@ -53135,7 +52878,7 @@ mixins.REDUCE_RIGHT = function (_left, _right, key) {
         return left.call(this, right.apply(this, args));
     };
 };
-}, 314, null, "smart-mixin/index.js");
+}, 313, null, "smart-mixin/index.js");
 __d(/* object-assign/index.js */function(global, require, module, exports) {'use strict';
 
 function ToObject(val) {
@@ -53162,7 +52905,4274 @@ module.exports = Object.assign || function (target, source) {
 
 	return to;
 };
-}, 315, null, "object-assign/index.js");
+}, 314, null, "object-assign/index.js");
+__d(/* react-native-ble/index.js */function(global, require, module, exports) {var noble = require(316                  ); // 316 = noble/with-bindings
+var bindings = require(332         ); // 332 = ./bindings
+module.exports = new noble(bindings);
+}, 315, null, "react-native-ble/index.js");
+__d(/* noble/with-bindings.js */function(global, require, module, exports) {var Noble = require(317          ); // 317 = ./lib/noble
+
+module.exports = function (bindings) {
+  return new Noble(bindings);
+};
+}, 316, null, "noble/with-bindings.js");
+__d(/* noble/lib/noble.js */function(global, require, module, exports) {var debug = require(318    )('noble'); // 318 = debug
+
+var events = require(321     ); // 321 = events
+var util = require(322   ); // 322 = util
+
+var Peripheral = require(325           ); // 325 = ./peripheral
+var Service = require(326        ); // 326 = ./service
+var Characteristic = require(328               ); // 328 = ./characteristic
+var Descriptor = require(330           ); // 330 = ./descriptor
+
+function Noble(bindings) {
+  this.state = 'unknown';
+  this.address = 'unknown';
+
+  this._bindings = bindings;
+  this._peripherals = {};
+  this._services = {};
+  this._characteristics = {};
+  this._descriptors = {};
+  this._discoveredPeripheralUUids = [];
+
+  this._bindings.on('stateChange', this.onStateChange.bind(this));
+  this._bindings.on('addressChange', this.onAddressChange.bind(this));
+  this._bindings.on('scanStart', this.onScanStart.bind(this));
+  this._bindings.on('scanStop', this.onScanStop.bind(this));
+  this._bindings.on('discover', this.onDiscover.bind(this));
+  this._bindings.on('connect', this.onConnect.bind(this));
+  this._bindings.on('disconnect', this.onDisconnect.bind(this));
+  this._bindings.on('rssiUpdate', this.onRssiUpdate.bind(this));
+  this._bindings.on('servicesDiscover', this.onServicesDiscover.bind(this));
+  this._bindings.on('includedServicesDiscover', this.onIncludedServicesDiscover.bind(this));
+  this._bindings.on('characteristicsDiscover', this.onCharacteristicsDiscover.bind(this));
+  this._bindings.on('read', this.onRead.bind(this));
+  this._bindings.on('write', this.onWrite.bind(this));
+  this._bindings.on('broadcast', this.onBroadcast.bind(this));
+  this._bindings.on('notify', this.onNotify.bind(this));
+  this._bindings.on('descriptorsDiscover', this.onDescriptorsDiscover.bind(this));
+  this._bindings.on('valueRead', this.onValueRead.bind(this));
+  this._bindings.on('valueWrite', this.onValueWrite.bind(this));
+  this._bindings.on('handleRead', this.onHandleRead.bind(this));
+  this._bindings.on('handleWrite', this.onHandleWrite.bind(this));
+  this._bindings.on('handleNotify', this.onHandleNotify.bind(this));
+
+  this.on('warning', function (message) {
+    if (this.listeners('warning').length === 1) {
+      console.warn('noble: ' + message);
+    }
+  }.bind(this));
+
+  this._bindings.init();
+}
+
+util.inherits(Noble, events.EventEmitter);
+
+Noble.prototype.onStateChange = function (state) {
+  debug('stateChange ' + state);
+
+  this.state = state;
+
+  this.emit('stateChange', state);
+};
+
+Noble.prototype.onAddressChange = function (address) {
+  debug('addressChange ' + address);
+
+  this.address = address;
+};
+
+Noble.prototype.startScanning = function (serviceUuids, allowDuplicates, callback) {
+  if (this.state !== 'poweredOn') {
+    var error = new Error('Could not start scanning, state is ' + this.state + ' (not poweredOn)');
+
+    if (typeof callback === 'function') {
+      callback(error);
+    } else {
+      throw error;
+    }
+  } else {
+    if (callback) {
+      this.once('scanStart', function (filterDuplicates) {
+        callback(null, filterDuplicates);
+      });
+    }
+
+    this._discoveredPeripheralUUids = [];
+    this._allowDuplicates = allowDuplicates;
+
+    this._bindings.startScanning(serviceUuids, allowDuplicates);
+  }
+};
+
+Noble.prototype.onScanStart = function (filterDuplicates) {
+  debug('scanStart');
+  this.emit('scanStart', filterDuplicates);
+};
+
+Noble.prototype.stopScanning = function (callback) {
+  if (callback) {
+    this.once('scanStop', callback);
+  }
+  this._bindings.stopScanning();
+};
+
+Noble.prototype.onScanStop = function () {
+  debug('scanStop');
+  this.emit('scanStop');
+};
+
+Noble.prototype.onDiscover = function (uuid, address, addressType, connectable, advertisement, rssi) {
+  var peripheral = this._peripherals[uuid];
+
+  if (!peripheral) {
+    peripheral = new Peripheral(this, uuid, address, addressType, connectable, advertisement, rssi);
+
+    this._peripherals[uuid] = peripheral;
+    this._services[uuid] = {};
+    this._characteristics[uuid] = {};
+    this._descriptors[uuid] = {};
+  } else {
+    for (var i in advertisement) {
+      if (advertisement[i] !== undefined) {
+        peripheral.advertisement[i] = advertisement[i];
+      }
+    }
+
+    peripheral.rssi = rssi;
+  }
+
+  var previouslyDiscoverd = this._discoveredPeripheralUUids.indexOf(uuid) !== -1;
+
+  if (!previouslyDiscoverd) {
+    this._discoveredPeripheralUUids.push(uuid);
+  }
+
+  if (this._allowDuplicates || !previouslyDiscoverd) {
+    this.emit('discover', peripheral);
+  }
+};
+
+Noble.prototype.connect = function (peripheralUuid) {
+  this._bindings.connect(peripheralUuid);
+};
+
+Noble.prototype.onConnect = function (peripheralUuid, error) {
+  var peripheral = this._peripherals[peripheralUuid];
+
+  if (peripheral) {
+    peripheral.state = error ? 'error' : 'connected';
+    peripheral.emit('connect', error);
+  } else {
+    this.emit('warning', 'unknown peripheral ' + peripheralUuid + ' connected!');
+  }
+};
+
+Noble.prototype.disconnect = function (peripheralUuid) {
+  this._bindings.disconnect(peripheralUuid);
+};
+
+Noble.prototype.onDisconnect = function (peripheralUuid) {
+  var peripheral = this._peripherals[peripheralUuid];
+
+  if (peripheral) {
+    peripheral.state = 'disconnected';
+    peripheral.emit('disconnect');
+  } else {
+    this.emit('warning', 'unknown peripheral ' + peripheralUuid + ' disconnected!');
+  }
+};
+
+Noble.prototype.updateRssi = function (peripheralUuid) {
+  this._bindings.updateRssi(peripheralUuid);
+};
+
+Noble.prototype.onRssiUpdate = function (peripheralUuid, rssi) {
+  var peripheral = this._peripherals[peripheralUuid];
+
+  if (peripheral) {
+    peripheral.rssi = rssi;
+
+    peripheral.emit('rssiUpdate', rssi);
+  } else {
+    this.emit('warning', 'unknown peripheral ' + peripheralUuid + ' RSSI update!');
+  }
+};
+
+Noble.prototype.discoverServices = function (peripheralUuid, uuids) {
+  this._bindings.discoverServices(peripheralUuid, uuids);
+};
+
+Noble.prototype.onServicesDiscover = function (peripheralUuid, serviceUuids) {
+  var peripheral = this._peripherals[peripheralUuid];
+
+  if (peripheral) {
+    var services = [];
+
+    for (var i = 0; i < serviceUuids.length; i++) {
+      var serviceUuid = serviceUuids[i];
+      var service = new Service(this, peripheralUuid, serviceUuid);
+
+      this._services[peripheralUuid][serviceUuid] = service;
+      this._characteristics[peripheralUuid][serviceUuid] = {};
+      this._descriptors[peripheralUuid][serviceUuid] = {};
+
+      services.push(service);
+    }
+
+    peripheral.services = services;
+
+    peripheral.emit('servicesDiscover', services);
+  } else {
+    this.emit('warning', 'unknown peripheral ' + peripheralUuid + ' services discover!');
+  }
+};
+
+Noble.prototype.discoverIncludedServices = function (peripheralUuid, serviceUuid, serviceUuids) {
+  this._bindings.discoverIncludedServices(peripheralUuid, serviceUuid, serviceUuids);
+};
+
+Noble.prototype.onIncludedServicesDiscover = function (peripheralUuid, serviceUuid, includedServiceUuids) {
+  var service = this._services[peripheralUuid][serviceUuid];
+
+  if (service) {
+    service.includedServiceUuids = includedServiceUuids;
+
+    service.emit('includedServicesDiscover', includedServiceUuids);
+  } else {
+    this.emit('warning', 'unknown peripheral ' + peripheralUuid + ', ' + serviceUuid + ' included services discover!');
+  }
+};
+
+Noble.prototype.discoverCharacteristics = function (peripheralUuid, serviceUuid, characteristicUuids) {
+  this._bindings.discoverCharacteristics(peripheralUuid, serviceUuid, characteristicUuids);
+};
+
+Noble.prototype.onCharacteristicsDiscover = function (peripheralUuid, serviceUuid, characteristics) {
+  var service = this._services[peripheralUuid][serviceUuid];
+
+  if (service) {
+    var characteristics_ = [];
+
+    for (var i = 0; i < characteristics.length; i++) {
+      var characteristicUuid = characteristics[i].uuid;
+
+      var characteristic = new Characteristic(this, peripheralUuid, serviceUuid, characteristicUuid, characteristics[i].properties);
+
+      this._characteristics[peripheralUuid][serviceUuid][characteristicUuid] = characteristic;
+      this._descriptors[peripheralUuid][serviceUuid][characteristicUuid] = {};
+
+      characteristics_.push(characteristic);
+    }
+
+    service.characteristics = characteristics_;
+
+    service.emit('characteristicsDiscover', characteristics_);
+  } else {
+    this.emit('warning', 'unknown peripheral ' + peripheralUuid + ', ' + serviceUuid + ' characteristics discover!');
+  }
+};
+
+Noble.prototype.read = function (peripheralUuid, serviceUuid, characteristicUuid) {
+  this._bindings.read(peripheralUuid, serviceUuid, characteristicUuid);
+};
+
+Noble.prototype.onRead = function (peripheralUuid, serviceUuid, characteristicUuid, data, isNotification) {
+  var characteristic = this._characteristics[peripheralUuid][serviceUuid][characteristicUuid];
+
+  if (characteristic) {
+    characteristic.emit('data', data, isNotification);
+
+    characteristic.emit('read', data, isNotification);
+  } else {
+    this.emit('warning', 'unknown peripheral ' + peripheralUuid + ', ' + serviceUuid + ', ' + characteristicUuid + ' read!');
+  }
+};
+
+Noble.prototype.write = function (peripheralUuid, serviceUuid, characteristicUuid, data, withoutResponse) {
+  this._bindings.write(peripheralUuid, serviceUuid, characteristicUuid, data, withoutResponse);
+};
+
+Noble.prototype.onWrite = function (peripheralUuid, serviceUuid, characteristicUuid) {
+  var characteristic = this._characteristics[peripheralUuid][serviceUuid][characteristicUuid];
+
+  if (characteristic) {
+    characteristic.emit('write');
+  } else {
+    this.emit('warning', 'unknown peripheral ' + peripheralUuid + ', ' + serviceUuid + ', ' + characteristicUuid + ' write!');
+  }
+};
+
+Noble.prototype.broadcast = function (peripheralUuid, serviceUuid, characteristicUuid, broadcast) {
+  this._bindings.broadcast(peripheralUuid, serviceUuid, characteristicUuid, broadcast);
+};
+
+Noble.prototype.onBroadcast = function (peripheralUuid, serviceUuid, characteristicUuid, state) {
+  var characteristic = this._characteristics[peripheralUuid][serviceUuid][characteristicUuid];
+
+  if (characteristic) {
+    characteristic.emit('broadcast', state);
+  } else {
+    this.emit('warning', 'unknown peripheral ' + peripheralUuid + ', ' + serviceUuid + ', ' + characteristicUuid + ' broadcast!');
+  }
+};
+
+Noble.prototype.notify = function (peripheralUuid, serviceUuid, characteristicUuid, notify) {
+  this._bindings.notify(peripheralUuid, serviceUuid, characteristicUuid, notify);
+};
+
+Noble.prototype.onNotify = function (peripheralUuid, serviceUuid, characteristicUuid, state) {
+  var characteristic = this._characteristics[peripheralUuid][serviceUuid][characteristicUuid];
+
+  if (characteristic) {
+    characteristic.emit('notify', state);
+  } else {
+    this.emit('warning', 'unknown peripheral ' + peripheralUuid + ', ' + serviceUuid + ', ' + characteristicUuid + ' notify!');
+  }
+};
+
+Noble.prototype.discoverDescriptors = function (peripheralUuid, serviceUuid, characteristicUuid) {
+  this._bindings.discoverDescriptors(peripheralUuid, serviceUuid, characteristicUuid);
+};
+
+Noble.prototype.onDescriptorsDiscover = function (peripheralUuid, serviceUuid, characteristicUuid, descriptors) {
+  var characteristic = this._characteristics[peripheralUuid][serviceUuid][characteristicUuid];
+
+  if (characteristic) {
+    var descriptors_ = [];
+
+    for (var i = 0; i < descriptors.length; i++) {
+      var descriptorUuid = descriptors[i];
+
+      var descriptor = new Descriptor(this, peripheralUuid, serviceUuid, characteristicUuid, descriptorUuid);
+
+      this._descriptors[peripheralUuid][serviceUuid][characteristicUuid][descriptorUuid] = descriptor;
+
+      descriptors_.push(descriptor);
+    }
+
+    characteristic.descriptors = descriptors_;
+
+    characteristic.emit('descriptorsDiscover', descriptors_);
+  } else {
+    this.emit('warning', 'unknown peripheral ' + peripheralUuid + ', ' + serviceUuid + ', ' + characteristicUuid + ' descriptors discover!');
+  }
+};
+
+Noble.prototype.readValue = function (peripheralUuid, serviceUuid, characteristicUuid, descriptorUuid) {
+  this._bindings.readValue(peripheralUuid, serviceUuid, characteristicUuid, descriptorUuid);
+};
+
+Noble.prototype.onValueRead = function (peripheralUuid, serviceUuid, characteristicUuid, descriptorUuid, data) {
+  var descriptor = this._descriptors[peripheralUuid][serviceUuid][characteristicUuid][descriptorUuid];
+
+  if (descriptor) {
+    descriptor.emit('valueRead', data);
+  } else {
+    this.emit('warning', 'unknown peripheral ' + peripheralUuid + ', ' + serviceUuid + ', ' + characteristicUuid + ', ' + descriptorUuid + ' value read!');
+  }
+};
+
+Noble.prototype.writeValue = function (peripheralUuid, serviceUuid, characteristicUuid, descriptorUuid, data) {
+  this._bindings.writeValue(peripheralUuid, serviceUuid, characteristicUuid, descriptorUuid, data);
+};
+
+Noble.prototype.onValueWrite = function (peripheralUuid, serviceUuid, characteristicUuid, descriptorUuid) {
+  var descriptor = this._descriptors[peripheralUuid][serviceUuid][characteristicUuid][descriptorUuid];
+
+  if (descriptor) {
+    descriptor.emit('valueWrite');
+  } else {
+    this.emit('warning', 'unknown peripheral ' + peripheralUuid + ', ' + serviceUuid + ', ' + characteristicUuid + ', ' + descriptorUuid + ' value write!');
+  }
+};
+
+Noble.prototype.readHandle = function (peripheralUuid, handle) {
+  this._bindings.readHandle(peripheralUuid, handle);
+};
+
+Noble.prototype.onHandleRead = function (peripheralUuid, handle, data) {
+  var peripheral = this._peripherals[peripheralUuid];
+
+  if (peripheral) {
+    peripheral.emit('handleRead' + handle, data);
+  } else {
+    this.emit('warning', 'unknown peripheral ' + peripheralUuid + ' handle read!');
+  }
+};
+
+Noble.prototype.writeHandle = function (peripheralUuid, handle, data, withoutResponse) {
+  this._bindings.writeHandle(peripheralUuid, handle, data, withoutResponse);
+};
+
+Noble.prototype.onHandleWrite = function (peripheralUuid, handle) {
+  var peripheral = this._peripherals[peripheralUuid];
+
+  if (peripheral) {
+    peripheral.emit('handleWrite' + handle);
+  } else {
+    this.emit('warning', 'unknown peripheral ' + peripheralUuid + ' handle write!');
+  }
+};
+
+Noble.prototype.onHandleNotify = function (peripheralUuid, handle, data) {
+  var peripheral = this._peripherals[peripheralUuid];
+
+  if (peripheral) {
+    peripheral.emit('handleNotify', handle, data);
+  } else {
+    this.emit('warning', 'unknown peripheral ' + peripheralUuid + ' handle notify!');
+  }
+};
+
+module.exports = Noble;
+}, 317, null, "noble/lib/noble.js");
+__d(/* debug/browser.js */function(global, require, module, exports) {
+
+exports = module.exports = require(319      ); // 319 = ./debug
+exports.log = log;
+exports.formatArgs = formatArgs;
+exports.save = save;
+exports.load = load;
+exports.useColors = useColors;
+exports.storage = 'undefined' != typeof chrome && 'undefined' != typeof chrome.storage ? chrome.storage.local : localstorage();
+
+exports.colors = ['lightseagreen', 'forestgreen', 'goldenrod', 'dodgerblue', 'darkorchid', 'crimson'];
+
+function useColors() {
+  return 'WebkitAppearance' in document.documentElement.style || window.console && (console.firebug || console.exception && console.table) || navigator.userAgent.toLowerCase().match(/firefox\/(\d+)/) && parseInt(RegExp.$1, 10) >= 31;
+}
+
+exports.formatters.j = function (v) {
+  return JSON.stringify(v);
+};
+
+function formatArgs() {
+  var args = arguments;
+  var useColors = this.useColors;
+
+  args[0] = (useColors ? '%c' : '') + this.namespace + (useColors ? ' %c' : ' ') + args[0] + (useColors ? '%c ' : ' ') + '+' + exports.humanize(this.diff);
+
+  if (!useColors) return args;
+
+  var c = 'color: ' + this.color;
+  args = [args[0], c, 'color: inherit'].concat(Array.prototype.slice.call(args, 1));
+
+  var index = 0;
+  var lastC = 0;
+  args[0].replace(/%[a-z%]/g, function (match) {
+    if ('%%' === match) return;
+    index++;
+    if ('%c' === match) {
+      lastC = index;
+    }
+  });
+
+  args.splice(lastC, 0, c);
+  return args;
+}
+
+function log() {
+  return 'object' === typeof console && console.log && Function.prototype.apply.call(console.log, console, arguments);
+}
+
+function save(namespaces) {
+  try {
+    if (null == namespaces) {
+      exports.storage.removeItem('debug');
+    } else {
+      exports.storage.debug = namespaces;
+    }
+  } catch (e) {}
+}
+
+function load() {
+  var r;
+  try {
+    r = exports.storage.debug;
+  } catch (e) {}
+  return r;
+}
+
+exports.enable(load());
+
+function localstorage() {
+  try {
+    return window.localStorage;
+  } catch (e) {}
+}
+}, 318, null, "debug/browser.js");
+__d(/* debug/debug.js */function(global, require, module, exports) {
+
+exports = module.exports = debug;
+exports.coerce = coerce;
+exports.disable = disable;
+exports.enable = enable;
+exports.enabled = enabled;
+exports.humanize = require(320 ); // 320 = ms
+
+exports.names = [];
+exports.skips = [];
+
+exports.formatters = {};
+
+var prevColor = 0;
+
+var prevTime;
+
+function selectColor() {
+  return exports.colors[prevColor++ % exports.colors.length];
+}
+
+function debug(namespace) {
+  function disabled() {}
+  disabled.enabled = false;
+
+  function enabled() {
+
+    var self = enabled;
+
+    var curr = +new Date();
+    var ms = curr - (prevTime || curr);
+    self.diff = ms;
+    self.prev = prevTime;
+    self.curr = curr;
+    prevTime = curr;
+
+    if (null == self.useColors) self.useColors = exports.useColors();
+    if (null == self.color && self.useColors) self.color = selectColor();
+
+    var args = Array.prototype.slice.call(arguments);
+
+    args[0] = exports.coerce(args[0]);
+
+    if ('string' !== typeof args[0]) {
+      args = ['%o'].concat(args);
+    }
+
+    var index = 0;
+    args[0] = args[0].replace(/%([a-z%])/g, function (match, format) {
+      if (match === '%%') return match;
+      index++;
+      var formatter = exports.formatters[format];
+      if ('function' === typeof formatter) {
+        var val = args[index];
+        match = formatter.call(self, val);
+
+        args.splice(index, 1);
+        index--;
+      }
+      return match;
+    });
+
+    if ('function' === typeof exports.formatArgs) {
+      args = exports.formatArgs.apply(self, args);
+    }
+    var logFn = enabled.log || exports.log || console.log.bind(console);
+    logFn.apply(self, args);
+  }
+  enabled.enabled = true;
+
+  var fn = exports.enabled(namespace) ? enabled : disabled;
+
+  fn.namespace = namespace;
+
+  return fn;
+}
+
+function enable(namespaces) {
+  exports.save(namespaces);
+
+  var split = (namespaces || '').split(/[\s,]+/);
+  var len = split.length;
+
+  for (var i = 0; i < len; i++) {
+    if (!split[i]) continue;
+    namespaces = split[i].replace(/\*/g, '.*?');
+    if (namespaces[0] === '-') {
+      exports.skips.push(new RegExp('^' + namespaces.substr(1) + '$'));
+    } else {
+      exports.names.push(new RegExp('^' + namespaces + '$'));
+    }
+  }
+}
+
+function disable() {
+  exports.enable('');
+}
+
+function enabled(name) {
+  var i, len;
+  for (i = 0, len = exports.skips.length; i < len; i++) {
+    if (exports.skips[i].test(name)) {
+      return false;
+    }
+  }
+  for (i = 0, len = exports.names.length; i < len; i++) {
+    if (exports.names[i].test(name)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function coerce(val) {
+  if (val instanceof Error) return val.stack || val.message;
+  return val;
+}
+}, 319, null, "debug/debug.js");
+__d(/* ms/index.js */function(global, require, module, exports) {
+
+var s = 1000;
+var m = s * 60;
+var h = m * 60;
+var d = h * 24;
+var y = d * 365.25;
+
+module.exports = function (val, options) {
+  options = options || {};
+  if ('string' == typeof val) return parse(val);
+  return options.long ? long(val) : short(val);
+};
+
+function parse(str) {
+  str = '' + str;
+  if (str.length > 10000) return;
+  var match = /^((?:\d+)?\.?\d+) *(milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|years?|yrs?|y)?$/i.exec(str);
+  if (!match) return;
+  var n = parseFloat(match[1]);
+  var type = (match[2] || 'ms').toLowerCase();
+  switch (type) {
+    case 'years':
+    case 'year':
+    case 'yrs':
+    case 'yr':
+    case 'y':
+      return n * y;
+    case 'days':
+    case 'day':
+    case 'd':
+      return n * d;
+    case 'hours':
+    case 'hour':
+    case 'hrs':
+    case 'hr':
+    case 'h':
+      return n * h;
+    case 'minutes':
+    case 'minute':
+    case 'mins':
+    case 'min':
+    case 'm':
+      return n * m;
+    case 'seconds':
+    case 'second':
+    case 'secs':
+    case 'sec':
+    case 's':
+      return n * s;
+    case 'milliseconds':
+    case 'millisecond':
+    case 'msecs':
+    case 'msec':
+    case 'ms':
+      return n;
+  }
+}
+
+function short(ms) {
+  if (ms >= d) return Math.round(ms / d) + 'd';
+  if (ms >= h) return Math.round(ms / h) + 'h';
+  if (ms >= m) return Math.round(ms / m) + 'm';
+  if (ms >= s) return Math.round(ms / s) + 's';
+  return ms + 'ms';
+}
+
+function long(ms) {
+  return plural(ms, d, 'day') || plural(ms, h, 'hour') || plural(ms, m, 'minute') || plural(ms, s, 'second') || ms + ' ms';
+}
+
+function plural(ms, n, name) {
+  if (ms < n) return;
+  if (ms < n * 1.5) return Math.floor(ms / n) + ' ' + name;
+  return Math.ceil(ms / n) + ' ' + name + 's';
+}
+}, 320, null, "ms/index.js");
+__d(/* events/events.js */function(global, require, module, exports) {
+
+function EventEmitter() {
+  this._events = this._events || {};
+  this._maxListeners = this._maxListeners || undefined;
+}
+module.exports = EventEmitter;
+
+EventEmitter.EventEmitter = EventEmitter;
+
+EventEmitter.prototype._events = undefined;
+EventEmitter.prototype._maxListeners = undefined;
+
+EventEmitter.defaultMaxListeners = 10;
+
+EventEmitter.prototype.setMaxListeners = function (n) {
+  if (!isNumber(n) || n < 0 || isNaN(n)) throw TypeError('n must be a positive number');
+  this._maxListeners = n;
+  return this;
+};
+
+EventEmitter.prototype.emit = function (type) {
+  var er, handler, len, args, i, listeners;
+
+  if (!this._events) this._events = {};
+
+  if (type === 'error') {
+    if (!this._events.error || isObject(this._events.error) && !this._events.error.length) {
+      er = arguments[1];
+      if (er instanceof Error) {
+        throw er;
+      } else {
+        var err = new Error('Uncaught, unspecified "error" event. (' + er + ')');
+        err.context = er;
+        throw err;
+      }
+    }
+  }
+
+  handler = this._events[type];
+
+  if (isUndefined(handler)) return false;
+
+  if (isFunction(handler)) {
+    switch (arguments.length) {
+      case 1:
+        handler.call(this);
+        break;
+      case 2:
+        handler.call(this, arguments[1]);
+        break;
+      case 3:
+        handler.call(this, arguments[1], arguments[2]);
+        break;
+
+      default:
+        args = Array.prototype.slice.call(arguments, 1);
+        handler.apply(this, args);
+    }
+  } else if (isObject(handler)) {
+    args = Array.prototype.slice.call(arguments, 1);
+    listeners = handler.slice();
+    len = listeners.length;
+    for (i = 0; i < len; i++) {
+      listeners[i].apply(this, args);
+    }
+  }
+
+  return true;
+};
+
+EventEmitter.prototype.addListener = function (type, listener) {
+  var m;
+
+  if (!isFunction(listener)) throw TypeError('listener must be a function');
+
+  if (!this._events) this._events = {};
+
+  if (this._events.newListener) this.emit('newListener', type, isFunction(listener.listener) ? listener.listener : listener);
+
+  if (!this._events[type]) this._events[type] = listener;else if (isObject(this._events[type])) this._events[type].push(listener);else this._events[type] = [this._events[type], listener];
+
+  if (isObject(this._events[type]) && !this._events[type].warned) {
+    if (!isUndefined(this._maxListeners)) {
+      m = this._maxListeners;
+    } else {
+      m = EventEmitter.defaultMaxListeners;
+    }
+
+    if (m && m > 0 && this._events[type].length > m) {
+      this._events[type].warned = true;
+      console.error('(node) warning: possible EventEmitter memory ' + 'leak detected. %d listeners added. ' + 'Use emitter.setMaxListeners() to increase limit.', this._events[type].length);
+      if (typeof console.trace === 'function') {
+        console.trace();
+      }
+    }
+  }
+
+  return this;
+};
+
+EventEmitter.prototype.on = EventEmitter.prototype.addListener;
+
+EventEmitter.prototype.once = function (type, listener) {
+  if (!isFunction(listener)) throw TypeError('listener must be a function');
+
+  var fired = false;
+
+  function g() {
+    this.removeListener(type, g);
+
+    if (!fired) {
+      fired = true;
+      listener.apply(this, arguments);
+    }
+  }
+
+  g.listener = listener;
+  this.on(type, g);
+
+  return this;
+};
+
+EventEmitter.prototype.removeListener = function (type, listener) {
+  var list, position, length, i;
+
+  if (!isFunction(listener)) throw TypeError('listener must be a function');
+
+  if (!this._events || !this._events[type]) return this;
+
+  list = this._events[type];
+  length = list.length;
+  position = -1;
+
+  if (list === listener || isFunction(list.listener) && list.listener === listener) {
+    delete this._events[type];
+    if (this._events.removeListener) this.emit('removeListener', type, listener);
+  } else if (isObject(list)) {
+    for (i = length; i-- > 0;) {
+      if (list[i] === listener || list[i].listener && list[i].listener === listener) {
+        position = i;
+        break;
+      }
+    }
+
+    if (position < 0) return this;
+
+    if (list.length === 1) {
+      list.length = 0;
+      delete this._events[type];
+    } else {
+      list.splice(position, 1);
+    }
+
+    if (this._events.removeListener) this.emit('removeListener', type, listener);
+  }
+
+  return this;
+};
+
+EventEmitter.prototype.removeAllListeners = function (type) {
+  var key, listeners;
+
+  if (!this._events) return this;
+
+  if (!this._events.removeListener) {
+    if (arguments.length === 0) this._events = {};else if (this._events[type]) delete this._events[type];
+    return this;
+  }
+
+  if (arguments.length === 0) {
+    for (key in this._events) {
+      if (key === 'removeListener') continue;
+      this.removeAllListeners(key);
+    }
+    this.removeAllListeners('removeListener');
+    this._events = {};
+    return this;
+  }
+
+  listeners = this._events[type];
+
+  if (isFunction(listeners)) {
+    this.removeListener(type, listeners);
+  } else if (listeners) {
+    while (listeners.length) {
+      this.removeListener(type, listeners[listeners.length - 1]);
+    }
+  }
+  delete this._events[type];
+
+  return this;
+};
+
+EventEmitter.prototype.listeners = function (type) {
+  var ret;
+  if (!this._events || !this._events[type]) ret = [];else if (isFunction(this._events[type])) ret = [this._events[type]];else ret = this._events[type].slice();
+  return ret;
+};
+
+EventEmitter.prototype.listenerCount = function (type) {
+  if (this._events) {
+    var evlistener = this._events[type];
+
+    if (isFunction(evlistener)) return 1;else if (evlistener) return evlistener.length;
+  }
+  return 0;
+};
+
+EventEmitter.listenerCount = function (emitter, type) {
+  return emitter.listenerCount(type);
+};
+
+function isFunction(arg) {
+  return typeof arg === 'function';
+}
+
+function isNumber(arg) {
+  return typeof arg === 'number';
+}
+
+function isObject(arg) {
+  return typeof arg === 'object' && arg !== null;
+}
+
+function isUndefined(arg) {
+  return arg === void 0;
+}
+}, 321, null, "events/events.js");
+__d(/* util/util.js */function(global, require, module, exports) {
+
+var formatRegExp = /%[sdj%]/g;
+exports.format = function (f) {
+  if (!isString(f)) {
+    var objects = [];
+    for (var i = 0; i < arguments.length; i++) {
+      objects.push(inspect(arguments[i]));
+    }
+    return objects.join(' ');
+  }
+
+  var i = 1;
+  var args = arguments;
+  var len = args.length;
+  var str = String(f).replace(formatRegExp, function (x) {
+    if (x === '%%') return '%';
+    if (i >= len) return x;
+    switch (x) {
+      case '%s':
+        return String(args[i++]);
+      case '%d':
+        return Number(args[i++]);
+      case '%j':
+        try {
+          return JSON.stringify(args[i++]);
+        } catch (_) {
+          return '[Circular]';
+        }
+      default:
+        return x;
+    }
+  });
+  for (var x = args[i]; i < len; x = args[++i]) {
+    if (isNull(x) || !isObject(x)) {
+      str += ' ' + x;
+    } else {
+      str += ' ' + inspect(x);
+    }
+  }
+  return str;
+};
+
+exports.deprecate = function (fn, msg) {
+  if (isUndefined(global.process)) {
+    return function () {
+      return exports.deprecate(fn, msg).apply(this, arguments);
+    };
+  }
+
+  if (process.noDeprecation === true) {
+    return fn;
+  }
+
+  var warned = false;
+  function deprecated() {
+    if (!warned) {
+      if (process.throwDeprecation) {
+        throw new Error(msg);
+      } else if (process.traceDeprecation) {
+        console.trace(msg);
+      } else {
+        console.error(msg);
+      }
+      warned = true;
+    }
+    return fn.apply(this, arguments);
+  }
+
+  return deprecated;
+};
+
+var debugs = {};
+var debugEnviron;
+exports.debuglog = function (set) {
+  if (isUndefined(debugEnviron)) debugEnviron = process.env.NODE_DEBUG || '';
+  set = set.toUpperCase();
+  if (!debugs[set]) {
+    if (new RegExp('\\b' + set + '\\b', 'i').test(debugEnviron)) {
+      var pid = process.pid;
+      debugs[set] = function () {
+        var msg = exports.format.apply(exports, arguments);
+        console.error('%s %d: %s', set, pid, msg);
+      };
+    } else {
+      debugs[set] = function () {};
+    }
+  }
+  return debugs[set];
+};
+
+function inspect(obj, opts) {
+  var ctx = {
+    seen: [],
+    stylize: stylizeNoColor
+  };
+
+  if (arguments.length >= 3) ctx.depth = arguments[2];
+  if (arguments.length >= 4) ctx.colors = arguments[3];
+  if (isBoolean(opts)) {
+    ctx.showHidden = opts;
+  } else if (opts) {
+    exports._extend(ctx, opts);
+  }
+
+  if (isUndefined(ctx.showHidden)) ctx.showHidden = false;
+  if (isUndefined(ctx.depth)) ctx.depth = 2;
+  if (isUndefined(ctx.colors)) ctx.colors = false;
+  if (isUndefined(ctx.customInspect)) ctx.customInspect = true;
+  if (ctx.colors) ctx.stylize = stylizeWithColor;
+  return formatValue(ctx, obj, ctx.depth);
+}
+exports.inspect = inspect;
+
+inspect.colors = {
+  'bold': [1, 22],
+  'italic': [3, 23],
+  'underline': [4, 24],
+  'inverse': [7, 27],
+  'white': [37, 39],
+  'grey': [90, 39],
+  'black': [30, 39],
+  'blue': [34, 39],
+  'cyan': [36, 39],
+  'green': [32, 39],
+  'magenta': [35, 39],
+  'red': [31, 39],
+  'yellow': [33, 39]
+};
+
+inspect.styles = {
+  'special': 'cyan',
+  'number': 'yellow',
+  'boolean': 'yellow',
+  'undefined': 'grey',
+  'null': 'bold',
+  'string': 'green',
+  'date': 'magenta',
+
+  'regexp': 'red'
+};
+
+function stylizeWithColor(str, styleType) {
+  var style = inspect.styles[styleType];
+
+  if (style) {
+    return '\x1B[' + inspect.colors[style][0] + 'm' + str + '\x1B[' + inspect.colors[style][1] + 'm';
+  } else {
+    return str;
+  }
+}
+
+function stylizeNoColor(str, styleType) {
+  return str;
+}
+
+function arrayToHash(array) {
+  var hash = {};
+
+  array.forEach(function (val, idx) {
+    hash[val] = true;
+  });
+
+  return hash;
+}
+
+function formatValue(ctx, value, recurseTimes) {
+  if (ctx.customInspect && value && isFunction(value.inspect) && value.inspect !== exports.inspect && !(value.constructor && value.constructor.prototype === value)) {
+    var ret = value.inspect(recurseTimes, ctx);
+    if (!isString(ret)) {
+      ret = formatValue(ctx, ret, recurseTimes);
+    }
+    return ret;
+  }
+
+  var primitive = formatPrimitive(ctx, value);
+  if (primitive) {
+    return primitive;
+  }
+
+  var keys = Object.keys(value);
+  var visibleKeys = arrayToHash(keys);
+
+  if (ctx.showHidden) {
+    keys = Object.getOwnPropertyNames(value);
+  }
+
+  if (isError(value) && (keys.indexOf('message') >= 0 || keys.indexOf('description') >= 0)) {
+    return formatError(value);
+  }
+
+  if (keys.length === 0) {
+    if (isFunction(value)) {
+      var name = value.name ? ': ' + value.name : '';
+      return ctx.stylize('[Function' + name + ']', 'special');
+    }
+    if (isRegExp(value)) {
+      return ctx.stylize(RegExp.prototype.toString.call(value), 'regexp');
+    }
+    if (isDate(value)) {
+      return ctx.stylize(Date.prototype.toString.call(value), 'date');
+    }
+    if (isError(value)) {
+      return formatError(value);
+    }
+  }
+
+  var base = '',
+      array = false,
+      braces = ['{', '}'];
+
+  if (isArray(value)) {
+    array = true;
+    braces = ['[', ']'];
+  }
+
+  if (isFunction(value)) {
+    var n = value.name ? ': ' + value.name : '';
+    base = ' [Function' + n + ']';
+  }
+
+  if (isRegExp(value)) {
+    base = ' ' + RegExp.prototype.toString.call(value);
+  }
+
+  if (isDate(value)) {
+    base = ' ' + Date.prototype.toUTCString.call(value);
+  }
+
+  if (isError(value)) {
+    base = ' ' + formatError(value);
+  }
+
+  if (keys.length === 0 && (!array || value.length == 0)) {
+    return braces[0] + base + braces[1];
+  }
+
+  if (recurseTimes < 0) {
+    if (isRegExp(value)) {
+      return ctx.stylize(RegExp.prototype.toString.call(value), 'regexp');
+    } else {
+      return ctx.stylize('[Object]', 'special');
+    }
+  }
+
+  ctx.seen.push(value);
+
+  var output;
+  if (array) {
+    output = formatArray(ctx, value, recurseTimes, visibleKeys, keys);
+  } else {
+    output = keys.map(function (key) {
+      return formatProperty(ctx, value, recurseTimes, visibleKeys, key, array);
+    });
+  }
+
+  ctx.seen.pop();
+
+  return reduceToSingleString(output, base, braces);
+}
+
+function formatPrimitive(ctx, value) {
+  if (isUndefined(value)) return ctx.stylize('undefined', 'undefined');
+  if (isString(value)) {
+    var simple = '\'' + JSON.stringify(value).replace(/^"|"$/g, '').replace(/'/g, "\\'").replace(/\\"/g, '"') + '\'';
+    return ctx.stylize(simple, 'string');
+  }
+  if (isNumber(value)) return ctx.stylize('' + value, 'number');
+  if (isBoolean(value)) return ctx.stylize('' + value, 'boolean');
+
+  if (isNull(value)) return ctx.stylize('null', 'null');
+}
+
+function formatError(value) {
+  return '[' + Error.prototype.toString.call(value) + ']';
+}
+
+function formatArray(ctx, value, recurseTimes, visibleKeys, keys) {
+  var output = [];
+  for (var i = 0, l = value.length; i < l; ++i) {
+    if (hasOwnProperty(value, String(i))) {
+      output.push(formatProperty(ctx, value, recurseTimes, visibleKeys, String(i), true));
+    } else {
+      output.push('');
+    }
+  }
+  keys.forEach(function (key) {
+    if (!key.match(/^\d+$/)) {
+      output.push(formatProperty(ctx, value, recurseTimes, visibleKeys, key, true));
+    }
+  });
+  return output;
+}
+
+function formatProperty(ctx, value, recurseTimes, visibleKeys, key, array) {
+  var name, str, desc;
+  desc = Object.getOwnPropertyDescriptor(value, key) || { value: value[key] };
+  if (desc.get) {
+    if (desc.set) {
+      str = ctx.stylize('[Getter/Setter]', 'special');
+    } else {
+      str = ctx.stylize('[Getter]', 'special');
+    }
+  } else {
+    if (desc.set) {
+      str = ctx.stylize('[Setter]', 'special');
+    }
+  }
+  if (!hasOwnProperty(visibleKeys, key)) {
+    name = '[' + key + ']';
+  }
+  if (!str) {
+    if (ctx.seen.indexOf(desc.value) < 0) {
+      if (isNull(recurseTimes)) {
+        str = formatValue(ctx, desc.value, null);
+      } else {
+        str = formatValue(ctx, desc.value, recurseTimes - 1);
+      }
+      if (str.indexOf('\n') > -1) {
+        if (array) {
+          str = str.split('\n').map(function (line) {
+            return '  ' + line;
+          }).join('\n').substr(2);
+        } else {
+          str = '\n' + str.split('\n').map(function (line) {
+            return '   ' + line;
+          }).join('\n');
+        }
+      }
+    } else {
+      str = ctx.stylize('[Circular]', 'special');
+    }
+  }
+  if (isUndefined(name)) {
+    if (array && key.match(/^\d+$/)) {
+      return str;
+    }
+    name = JSON.stringify('' + key);
+    if (name.match(/^"([a-zA-Z_][a-zA-Z_0-9]*)"$/)) {
+      name = name.substr(1, name.length - 2);
+      name = ctx.stylize(name, 'name');
+    } else {
+      name = name.replace(/'/g, "\\'").replace(/\\"/g, '"').replace(/(^"|"$)/g, "'");
+      name = ctx.stylize(name, 'string');
+    }
+  }
+
+  return name + ': ' + str;
+}
+
+function reduceToSingleString(output, base, braces) {
+  var numLinesEst = 0;
+  var length = output.reduce(function (prev, cur) {
+    numLinesEst++;
+    if (cur.indexOf('\n') >= 0) numLinesEst++;
+    return prev + cur.replace(/\u001b\[\d\d?m/g, '').length + 1;
+  }, 0);
+
+  if (length > 60) {
+    return braces[0] + (base === '' ? '' : base + '\n ') + ' ' + output.join(',\n  ') + ' ' + braces[1];
+  }
+
+  return braces[0] + base + ' ' + output.join(', ') + ' ' + braces[1];
+}
+
+function isArray(ar) {
+  return Array.isArray(ar);
+}
+exports.isArray = isArray;
+
+function isBoolean(arg) {
+  return typeof arg === 'boolean';
+}
+exports.isBoolean = isBoolean;
+
+function isNull(arg) {
+  return arg === null;
+}
+exports.isNull = isNull;
+
+function isNullOrUndefined(arg) {
+  return arg == null;
+}
+exports.isNullOrUndefined = isNullOrUndefined;
+
+function isNumber(arg) {
+  return typeof arg === 'number';
+}
+exports.isNumber = isNumber;
+
+function isString(arg) {
+  return typeof arg === 'string';
+}
+exports.isString = isString;
+
+function isSymbol(arg) {
+  return typeof arg === 'symbol';
+}
+exports.isSymbol = isSymbol;
+
+function isUndefined(arg) {
+  return arg === void 0;
+}
+exports.isUndefined = isUndefined;
+
+function isRegExp(re) {
+  return isObject(re) && objectToString(re) === '[object RegExp]';
+}
+exports.isRegExp = isRegExp;
+
+function isObject(arg) {
+  return typeof arg === 'object' && arg !== null;
+}
+exports.isObject = isObject;
+
+function isDate(d) {
+  return isObject(d) && objectToString(d) === '[object Date]';
+}
+exports.isDate = isDate;
+
+function isError(e) {
+  return isObject(e) && (objectToString(e) === '[object Error]' || e instanceof Error);
+}
+exports.isError = isError;
+
+function isFunction(arg) {
+  return typeof arg === 'function';
+}
+exports.isFunction = isFunction;
+
+function isPrimitive(arg) {
+  return arg === null || typeof arg === 'boolean' || typeof arg === 'number' || typeof arg === 'string' || typeof arg === 'symbol' || typeof arg === 'undefined';
+}
+exports.isPrimitive = isPrimitive;
+
+exports.isBuffer = require(323                 ); // 323 = ./support/isBuffer
+
+function objectToString(o) {
+  return Object.prototype.toString.call(o);
+}
+
+function pad(n) {
+  return n < 10 ? '0' + n.toString(10) : n.toString(10);
+}
+
+var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function timestamp() {
+  var d = new Date();
+  var time = [pad(d.getHours()), pad(d.getMinutes()), pad(d.getSeconds())].join(':');
+  return [d.getDate(), months[d.getMonth()], time].join(' ');
+}
+
+exports.log = function () {
+  console.log('%s - %s', timestamp(), exports.format.apply(exports, arguments));
+};
+
+exports.inherits = require(324       ); // 324 = inherits
+
+exports._extend = function (origin, add) {
+  if (!add || !isObject(add)) return origin;
+
+  var keys = Object.keys(add);
+  var i = keys.length;
+  while (i--) {
+    origin[keys[i]] = add[keys[i]];
+  }
+  return origin;
+};
+
+function hasOwnProperty(obj, prop) {
+  return Object.prototype.hasOwnProperty.call(obj, prop);
+}
+}, 322, null, "util/util.js");
+__d(/* util/support/isBufferBrowser.js */function(global, require, module, exports) {module.exports = function isBuffer(arg) {
+  return arg && typeof arg === 'object' && typeof arg.copy === 'function' && typeof arg.fill === 'function' && typeof arg.readUInt8 === 'function';
+};
+}, 323, null, "util/support/isBufferBrowser.js");
+__d(/* inherits/inherits_browser.js */function(global, require, module, exports) {if (typeof Object.create === 'function') {
+  module.exports = function inherits(ctor, superCtor) {
+    ctor.super_ = superCtor;
+    ctor.prototype = Object.create(superCtor.prototype, {
+      constructor: {
+        value: ctor,
+        enumerable: false,
+        writable: true,
+        configurable: true
+      }
+    });
+  };
+} else {
+  module.exports = function inherits(ctor, superCtor) {
+    ctor.super_ = superCtor;
+    var TempCtor = function TempCtor() {};
+    TempCtor.prototype = superCtor.prototype;
+    ctor.prototype = new TempCtor();
+    ctor.prototype.constructor = ctor;
+  };
+}
+}, 324, null, "inherits/inherits_browser.js");
+__d(/* noble/lib/peripheral.js */function(global, require, module, exports) {
+var debug = require(318    )('peripheral'); // 318 = debug
+
+var events = require(321     ); // 321 = events
+var util = require(322   ); // 322 = util
+
+function Peripheral(noble, id, address, addressType, connectable, advertisement, rssi) {
+  this._noble = noble;
+
+  this.id = id;
+  this.uuid = id;
+  this.address = address;
+  this.addressType = addressType;
+  this.connectable = connectable;
+  this.advertisement = advertisement;
+  this.rssi = rssi;
+  this.services = null;
+  this.state = 'disconnected';
+}
+
+util.inherits(Peripheral, events.EventEmitter);
+
+Peripheral.prototype.toString = function () {
+  return JSON.stringify({
+    id: this.id,
+    address: this.address,
+    addressType: this.addressType,
+    connectable: this.connectable,
+    advertisement: this.advertisement,
+    rssi: this.rssi,
+    state: this.state
+  });
+};
+
+Peripheral.prototype.connect = function (callback) {
+  if (callback) {
+    this.once('connect', function (error) {
+      callback(error);
+    });
+  }
+
+  if (this.state === 'connected') {
+    this.emit('connect', new Error('Peripheral already connected'));
+  } else {
+    this.state = 'connecting';
+    this._noble.connect(this.id);
+  }
+};
+
+Peripheral.prototype.disconnect = function (callback) {
+  if (callback) {
+    this.once('disconnect', function () {
+      callback(null);
+    });
+  }
+  this.state = 'disconnecting';
+  this._noble.disconnect(this.id);
+};
+
+Peripheral.prototype.updateRssi = function (callback) {
+  if (callback) {
+    this.once('rssiUpdate', function (rssi) {
+      callback(null, rssi);
+    });
+  }
+
+  this._noble.updateRssi(this.id);
+};
+
+Peripheral.prototype.discoverServices = function (uuids, callback) {
+  if (callback) {
+    this.once('servicesDiscover', function (services) {
+      callback(null, services);
+    });
+  }
+
+  this._noble.discoverServices(this.id, uuids);
+};
+
+Peripheral.prototype.discoverSomeServicesAndCharacteristics = function (serviceUuids, characteristicsUuids, callback) {
+  this.discoverServices(serviceUuids, function (err, services) {
+    var numDiscovered = 0;
+    var allCharacteristics = [];
+
+    for (var i in services) {
+      var service = services[i];
+
+      service.discoverCharacteristics(characteristicsUuids, function (error, characteristics) {
+        numDiscovered++;
+
+        if (error === null) {
+          for (var j in characteristics) {
+            var characteristic = characteristics[j];
+
+            allCharacteristics.push(characteristic);
+          }
+        }
+
+        if (numDiscovered === services.length) {
+          if (callback) {
+            callback(null, services, allCharacteristics);
+          }
+        }
+      }.bind(this));
+    }
+  }.bind(this));
+};
+
+Peripheral.prototype.discoverAllServicesAndCharacteristics = function (callback) {
+  this.discoverSomeServicesAndCharacteristics([], [], callback);
+};
+
+Peripheral.prototype.readHandle = function (handle, callback) {
+  if (callback) {
+    this.once('handleRead' + handle, function (data) {
+      callback(null, data);
+    });
+  }
+
+  this._noble.readHandle(this.id, handle);
+};
+
+Peripheral.prototype.writeHandle = function (handle, data, withoutResponse, callback) {
+  if (!(data instanceof Buffer)) {
+    throw new Error('data must be a Buffer');
+  }
+
+  if (callback) {
+    this.once('handleWrite' + handle, function () {
+      callback(null);
+    });
+  }
+
+  this._noble.writeHandle(this.id, handle, data, withoutResponse);
+};
+
+module.exports = Peripheral;
+}, 325, null, "noble/lib/peripheral.js");
+__d(/* noble/lib/service.js */function(global, require, module, exports) {var debug = require(318    )('service'); // 318 = debug
+
+var events = require(321     ); // 321 = events
+var util = require(322   ); // 322 = util
+
+var services = require(327              ); // 327 = ./services.json
+
+function Service(noble, peripheralId, uuid) {
+  this._noble = noble;
+  this._peripheralId = peripheralId;
+
+  this.uuid = uuid;
+  this.name = null;
+  this.type = null;
+  this.includedServiceUuids = null;
+  this.characteristics = null;
+
+  var service = services[uuid];
+  if (service) {
+    this.name = service.name;
+    this.type = service.type;
+  }
+}
+
+util.inherits(Service, events.EventEmitter);
+
+Service.prototype.toString = function () {
+  return JSON.stringify({
+    uuid: this.uuid,
+    name: this.name,
+    type: this.type,
+    includedServiceUuids: this.includedServiceUuids
+  });
+};
+
+Service.prototype.discoverIncludedServices = function (serviceUuids, callback) {
+  if (callback) {
+    this.once('includedServicesDiscover', function (includedServiceUuids) {
+      callback(null, includedServiceUuids);
+    });
+  }
+
+  this._noble.discoverIncludedServices(this._peripheralId, this.uuid, serviceUuids);
+};
+
+Service.prototype.discoverCharacteristics = function (characteristicUuids, callback) {
+  if (callback) {
+    this.once('characteristicsDiscover', function (characteristics) {
+      callback(null, characteristics);
+    });
+  }
+
+  this._noble.discoverCharacteristics(this._peripheralId, this.uuid, characteristicUuids);
+};
+
+module.exports = Service;
+}, 326, null, "noble/lib/service.js");
+__d(/* noble/lib/services.json */function(global, require, module, exports) {module.exports = module.exports = {
+           "1800": { "name": "Generic Access",
+                      "type": "org.bluetooth.service.generic_access"
+           },
+           "1801": { "name": "Generic Attribute",
+                      "type": "org.bluetooth.service.generic_attribute"
+           },
+           "1802": { "name": "Immediate Alert",
+                      "type": "org.bluetooth.service.immediate_alert"
+           },
+           "1803": { "name": "Link Loss",
+                      "type": "org.bluetooth.service.link_loss"
+           },
+           "1804": { "name": "Tx Power",
+                      "type": "org.bluetooth.service.tx_power"
+           },
+           "1805": { "name": "Current Time Service",
+                      "type": "org.bluetooth.service.current_time"
+           },
+           "1806": { "name": "Reference Time Update Service",
+                      "type": "org.bluetooth.service.reference_time_update"
+           },
+           "1807": { "name": "Next DST Change Service",
+                      "type": "org.bluetooth.service.next_dst_change"
+           },
+           "1808": { "name": "Glucose",
+                      "type": "org.bluetooth.service.glucose"
+           },
+           "1809": { "name": "Health Thermometer",
+                      "type": "org.bluetooth.service.health_thermometer"
+           },
+           "180a": { "name": "Device Information",
+                      "type": "org.bluetooth.service.device_information"
+           },
+           "180d": { "name": "Heart Rate",
+                      "type": "org.bluetooth.service.heart_rate"
+           },
+           "180e": { "name": "Phone Alert Status Service",
+                      "type": "org.bluetooth.service.phone_alert_service"
+           },
+           "180f": { "name": "Battery Service",
+                      "type": "org.bluetooth.service.battery_service"
+           },
+           "1810": { "name": "Blood Pressure",
+                      "type": "org.bluetooth.service.blood_pressuer"
+           },
+           "1811": { "name": "Alert Notification Service",
+                      "type": "org.bluetooth.service.alert_notification"
+           },
+           "1812": { "name": "Human Interface Device",
+                      "type": "org.bluetooth.service.human_interface_device"
+           },
+           "1813": { "name": "Scan Parameters",
+                      "type": "org.bluetooth.service.scan_parameters"
+           },
+           "1814": { "name": "Running Speed and Cadence",
+                      "type": "org.bluetooth.service.running_speed_and_cadence"
+           },
+           "1815": { "name": "Automation IO",
+                      "type": "org.bluetooth.service.automation_io"
+           },
+           "1816": { "name": "Cycling Speed and Cadence",
+                      "type": "org.bluetooth.service.cycling_speed_and_cadence"
+           },
+           "1818": { "name": "Cycling Power",
+                      "type": "org.bluetooth.service.cycling_power"
+           },
+           "1819": { "name": "Location and Navigation",
+                      "type": "org.bluetooth.service.location_and_navigation"
+           },
+           "181a": { "name": "Environmental Sensing",
+                      "type": "org.bluetooth.service.environmental_sensing"
+           },
+           "181b": { "name": "Body Composition",
+                      "type": "org.bluetooth.service.body_composition"
+           },
+           "181c": { "name": "User Data",
+                      "type": "org.bluetooth.service.user_data"
+           },
+           "181d": { "name": "Weight Scale",
+                      "type": "org.bluetooth.service.weight_scale"
+           },
+           "181e": { "name": "Bond Management",
+                      "type": "org.bluetooth.service.bond_management"
+           },
+           "181f": { "name": "Continuous Glucose Monitoring",
+                      "type": "org.bluetooth.service.continuous_glucose_monitoring"
+           },
+           "1820": { "name": "Internet Protocol Support",
+                      "type": "org.bluetooth.service.internet_protocol_support"
+           }
+};
+}, 327, null, "noble/lib/services.json");
+__d(/* noble/lib/characteristic.js */function(global, require, module, exports) {var debug = require(318    )('characteristic'); // 318 = debug
+
+var events = require(321     ); // 321 = events
+var util = require(322   ); // 322 = util
+
+var characteristics = require(329                     ); // 329 = ./characteristics.json
+
+function Characteristic(noble, peripheralId, serviceUuid, uuid, properties) {
+  this._noble = noble;
+  this._peripheralId = peripheralId;
+  this._serviceUuid = serviceUuid;
+
+  this.uuid = uuid;
+  this.name = null;
+  this.type = null;
+  this.properties = properties;
+  this.descriptors = null;
+
+  var characteristic = characteristics[uuid];
+  if (characteristic) {
+    this.name = characteristic.name;
+    this.type = characteristic.type;
+  }
+}
+
+util.inherits(Characteristic, events.EventEmitter);
+
+Characteristic.prototype.toString = function () {
+  return JSON.stringify({
+    uuid: this.uuid,
+    name: this.name,
+    type: this.type,
+    properties: this.properties
+  });
+};
+
+Characteristic.prototype.read = function (callback) {
+  if (callback) {
+    var onRead = function (data, isNotificaton) {
+      if (!isNotificaton) {
+        this.removeListener('read', onRead);
+
+        callback(null, data);
+      }
+    }.bind(this);
+
+    this.on('read', onRead);
+  }
+
+  this._noble.read(this._peripheralId, this._serviceUuid, this.uuid);
+};
+
+Characteristic.prototype.write = function (data, withoutResponse, callback) {
+  if (process.title !== 'browser') {
+    if (!(data instanceof Buffer)) {
+      throw new Error('data must be a Buffer');
+    }
+  }
+
+  if (callback) {
+    this.once('write', function () {
+      callback(null);
+    });
+  }
+
+  this._noble.write(this._peripheralId, this._serviceUuid, this.uuid, data, withoutResponse);
+};
+
+Characteristic.prototype.broadcast = function (broadcast, callback) {
+  if (callback) {
+    this.once('broadcast', function () {
+      callback(null);
+    });
+  }
+
+  this._noble.broadcast(this._peripheralId, this._serviceUuid, this.uuid, broadcast);
+};
+
+Characteristic.prototype.notify = function (notify, callback) {
+  if (callback) {
+    this.once('notify', function () {
+      callback(null);
+    });
+  }
+
+  this._noble.notify(this._peripheralId, this._serviceUuid, this.uuid, notify);
+};
+
+Characteristic.prototype.subscribe = function (callback) {
+  this.notify(true, callback);
+};
+
+Characteristic.prototype.unsubscribe = function (callback) {
+  this.notify(false, callback);
+};
+
+Characteristic.prototype.discoverDescriptors = function (callback) {
+  if (callback) {
+    this.once('descriptorsDiscover', function (descriptors) {
+      callback(null, descriptors);
+    });
+  }
+
+  this._noble.discoverDescriptors(this._peripheralId, this._serviceUuid, this.uuid);
+};
+
+module.exports = Characteristic;
+}, 328, null, "noble/lib/characteristic.js");
+__d(/* noble/lib/characteristics.json */function(global, require, module, exports) {module.exports = module.exports = {
+           "2a00": { "name": "Device Name",
+                      "type": "org.bluetooth.characteristic.gap.device_name"
+           },
+           "2a01": { "name": "Appearance",
+                      "type": "org.bluetooth.characteristic.gap.appearance"
+           },
+           "2a02": { "name": "Peripheral Privacy Flag",
+                      "type": "org.bluetooth.characteristic.gap.peripheral_privacy_flag"
+           },
+           "2a03": { "name": "Reconnection Address",
+                      "type": "org.bluetooth.characteristic.gap.reconnection_address"
+           },
+           "2a04": { "name": "Peripheral Preferred Connection Parameters",
+                      "type": "org.bluetooth.characteristic.gap.peripheral_preferred_connection_parameters"
+           },
+           "2a05": { "name": "Service Changed",
+                      "type": "org.bluetooth.characteristic.gatt.service_changed"
+           },
+           "2a06": { "name": "Alert Level",
+                      "type": "org.bluetooth.characteristic.alert_level"
+           },
+           "2a07": { "name": "Tx Power Level",
+                      "type": "org.bluetooth.characteristic.tx_power_level"
+           },
+           "2a08": { "name": "Date Time",
+                      "type": "org.bluetooth.characteristic.date_time"
+           },
+           "2a09": { "name": "Day of Week",
+                      "type": "org.bluetooth.characteristic.day_of_week"
+           },
+           "2a0a": { "name": "Day Date Time",
+                      "type": "org.bluetooth.characteristic.day_date_time"
+           },
+           "2a0c": { "name": "Exact Time 256",
+                      "type": "org.bluetooth.characteristic.exact_time_256"
+           },
+           "2a0d": { "name": "DST Offset",
+                      "type": "org.bluetooth.characteristic.dst_offset"
+           },
+           "2a0e": { "name": "Time Zone",
+                      "type": "org.bluetooth.characteristic.time_zone"
+           },
+           "2a0f": { "name": "Local Time Information",
+                      "type": "org.bluetooth.characteristic.local_time_information"
+           },
+           "2a11": { "name": "Time with DST",
+                      "type": "org.bluetooth.characteristic.time_with_dst"
+           },
+           "2a12": { "name": "Time Accuracy",
+                      "type": "org.bluetooth.characteristic.time_accuracy"
+           },
+           "2a13": { "name": "Time Source",
+                      "type": "org.bluetooth.characteristic.time_source"
+           },
+           "2a14": { "name": "Reference Time Information",
+                      "type": "org.bluetooth.characteristic.reference_time_information"
+           },
+           "2a16": { "name": "Time Update Control Point",
+                      "type": "org.bluetooth.characteristic.time_update_control_point"
+           },
+           "2a17": { "name": "Time Update State",
+                      "type": "org.bluetooth.characteristic.time_update_state"
+           },
+           "2a18": { "name": "Glucose Measurement",
+                      "type": "org.bluetooth.characteristic.glucose_measurement"
+           },
+           "2a19": { "name": "Battery Level",
+                      "type": "org.bluetooth.characteristic.battery_level"
+           },
+           "2a1c": { "name": "Temperature Measurement",
+                      "type": "org.bluetooth.characteristic.temperature_measurement"
+           },
+           "2a1d": { "name": "Temperature Type",
+                      "type": "org.bluetooth.characteristic.temperature_type"
+           },
+           "2a1e": { "name": "Intermediate Temperature",
+                      "type": "org.bluetooth.characteristic.intermediate_temperature"
+           },
+           "2a21": { "name": "Measurement Interval",
+                      "type": "org.bluetooth.characteristic.measurement_interval"
+           },
+           "2a22": { "name": "Boot Keyboard Input Report",
+                      "type": "org.bluetooth.characteristic.boot_keyboard_input_report"
+           },
+           "2a23": { "name": "System ID",
+                      "type": "org.bluetooth.characteristic.system_id"
+           },
+           "2a24": { "name": "Model Number String",
+                      "type": "org.bluetooth.characteristic.model_number_string"
+           },
+           "2a25": { "name": "Serial Number String",
+                      "type": "org.bluetooth.characteristic.serial_number_string"
+           },
+           "2a26": { "name": "Firmware Revision String",
+                      "type": "org.bluetooth.characteristic.firmware_revision_string"
+           },
+           "2a27": { "name": "Hardware Revision String",
+                      "type": "org.bluetooth.characteristic.hardware_revision_string"
+           },
+           "2a28": { "name": "Software Revision String",
+                      "type": "org.bluetooth.characteristic.software_revision_string"
+           },
+           "2a29": { "name": "Manufacturer Name String",
+                      "type": "org.bluetooth.characteristic.manufacturer_name_string"
+           },
+           "2a2a": { "name": "IEEE 11073-20601 Regulatory Certification Data List",
+                      "type": "org.bluetooth.characteristic.ieee_11073-20601_regulatory_certification_data_list"
+           },
+           "2a2b": { "name": "Current Time",
+                      "type": "org.bluetooth.characteristic.current_time"
+           },
+           "2a2c": { "name": "Magnetic Declination",
+                      "type": "org.bluetooth.characteristic.magnetic_declination"
+           },
+           "2a31": { "name": "Scan Refresh",
+                      "type": "org.bluetooth.characteristic.scan_refresh"
+           },
+           "2a32": { "name": "Boot Keyboard Output Report",
+                      "type": "org.bluetooth.characteristic.boot_keyboard_output_report"
+           },
+           "2a33": { "name": "Boot Mouse Input Report",
+                      "type": "org.bluetooth.characteristic.boot_mouse_input_report"
+           },
+           "2a34": { "name": "Glucose Measurement Context",
+                      "type": "org.bluetooth.characteristic.glucose_measurement_context"
+           },
+           "2a35": { "name": "Blood Pressure Measurement",
+                      "type": "org.bluetooth.characteristic.blood_pressure_measurement"
+           },
+           "2a36": { "name": "Intermediate Cuff Pressure",
+                      "type": "org.bluetooth.characteristic.intermediate_blood_pressure"
+           },
+           "2a37": { "name": "Heart Rate Measurement",
+                      "type": "org.bluetooth.characteristic.heart_rate_measurement"
+           },
+           "2a38": { "name": "Body Sensor Location",
+                      "type": "org.bluetooth.characteristic.body_sensor_location"
+           },
+           "2a39": { "name": "Heart Rate Control Point",
+                      "type": "org.bluetooth.characteristic.heart_rate_control_point"
+           },
+           "2a3f": { "name": "Alert Status",
+                      "type": "org.bluetooth.characteristic.alert_status"
+           },
+           "2a40": { "name": "Ringer Control Point",
+                      "type": "org.bluetooth.characteristic.ringer_control_point"
+           },
+           "2a41": { "name": "Ringer Setting",
+                      "type": "org.bluetooth.characteristic.ringer_setting"
+           },
+           "2a42": { "name": "Alert Category ID Bit Mask",
+                      "type": "org.bluetooth.characteristic.alert_category_id_bit_mask"
+           },
+           "2a43": { "name": "Alert Category ID",
+                      "type": "org.bluetooth.characteristic.alert_category_id"
+           },
+           "2a44": { "name": "Alert Notification Control Point",
+                      "type": "org.bluetooth.characteristic.alert_notification_control_point"
+           },
+           "2a45": { "name": "Unread Alert Status",
+                      "type": "org.bluetooth.characteristic.unread_alert_status"
+           },
+           "2a46": { "name": "New Alert",
+                      "type": "org.bluetooth.characteristic.new_alert"
+           },
+           "2a47": { "name": "Supported New Alert Category",
+                      "type": "org.bluetooth.characteristic.supported_new_alert_category"
+           },
+           "2a48": { "name": "Supported Unread Alert Category",
+                      "type": "org.bluetooth.characteristic.supported_unread_alert_category"
+           },
+           "2a49": { "name": "Blood Pressure Feature",
+                      "type": "org.bluetooth.characteristic.blood_pressure_feature"
+           },
+           "2a4a": { "name": "HID Information",
+                      "type": "org.bluetooth.characteristic.hid_information"
+           },
+           "2a4b": { "name": "Report Map",
+                      "type": "org.bluetooth.characteristic.report_map"
+           },
+           "2a4c": { "name": "HID Control Point",
+                      "type": "org.bluetooth.characteristic.hid_control_point"
+           },
+           "2a4d": { "name": "Report",
+                      "type": "org.bluetooth.characteristic.report"
+           },
+           "2a4e": { "name": "Protocol Mode",
+                      "type": "org.bluetooth.characteristic.protocol_mode"
+           },
+           "2a4f": { "name": "Scan Interval Window",
+                      "type": "org.bluetooth.characteristic.scan_interval_window"
+           },
+           "2a50": { "name": "PnP ID",
+                      "type": "org.bluetooth.characteristic.pnp_id"
+           },
+           "2a51": { "name": "Glucose Feature",
+                      "type": "org.bluetooth.characteristic.glucose_feature"
+           },
+           "2a52": { "name": "Record Access Control Point",
+                      "type": "org.bluetooth.characteristic.record_access_control_point"
+           },
+           "2a53": { "name": "RSC Measurement",
+                      "type": "org.bluetooth.characteristic.rsc_measurement"
+           },
+           "2a54": { "name": "RSC Feature",
+                      "type": "org.bluetooth.characteristic.rsc_feature"
+           },
+           "2a55": { "name": "SC Control Point",
+                      "type": "org.bluetooth.characteristic.sc_control_point"
+           },
+           "2a56": { "name": "Digital",
+                      "type": "org.bluetooth.characteristic.digital"
+           },
+           "2a58": { "name": "Analog",
+                      "type": "org.bluetooth.characteristic.analog"
+           },
+           "2a5a": { "name": "Aggregate",
+                      "type": "org.bluetooth.characteristic.aggregate"
+           },
+           "2a5b": { "name": "CSC Measurement",
+                      "type": "org.bluetooth.characteristic.csc_measurement"
+           },
+           "2a5c": { "name": "CSC Feature",
+                      "type": "org.bluetooth.characteristic.csc_feature"
+           },
+           "2a5d": { "name": "Sensor Location",
+                      "type": "org.bluetooth.characteristic.sensor_location"
+           },
+           "2a63": { "name": "Cycling Power Measurement",
+                      "type": "org.bluetooth.characteristic.cycling_power_measurement"
+           },
+           "2a64": { "name": "Cycling Power Vector",
+                      "type": "org.bluetooth.characteristic.cycling_power_vector"
+           },
+           "2a65": { "name": "Cycling Power Feature",
+                      "type": "org.bluetooth.characteristic.cycling_power_feature"
+           },
+           "2a66": { "name": "Cycling Power Control Point",
+                      "type": "org.bluetooth.characteristic.cycling_power_control_point"
+           },
+           "2a67": { "name": "Location and Speed",
+                      "type": "org.bluetooth.characteristic.location_and_speed"
+           },
+           "2a68": { "name": "Navigation",
+                      "type": "org.bluetooth.characteristic.navigation"
+           },
+           "2a69": { "name": "Position Quality",
+                      "type": "org.bluetooth.characteristic.position_quality"
+           },
+           "2a6a": { "name": "LN Feature",
+                      "type": "org.bluetooth.characteristic.ln_feature"
+           },
+           "2a6b": { "name": "LN Control Point",
+                      "type": "org.bluetooth.characteristic.ln_control_point"
+           },
+           "2a6c": { "name": "Elevation",
+                      "type": "org.bluetooth.characteristic.elevation"
+           },
+           "2a6d": { "name": "Pressure",
+                      "type": "org.bluetooth.characteristic.pressure"
+           },
+           "2a6e": { "name": "Temperature",
+                      "type": "org.bluetooth.characteristic.temperature"
+           },
+           "2a6f": { "name": "Humidity",
+                      "type": "org.bluetooth.characteristic.humidity"
+           },
+           "2a70": { "name": "True Wind Speed",
+                      "type": "org.bluetooth.characteristic.true_wind_speed"
+           },
+           "2a71": { "name": "True Wind Direction",
+                      "type": "org.bluetooth.characteristic.true_wind_direction"
+           },
+           "2a72": { "name": "Apparent Wind Speed",
+                      "type": "org.bluetooth.characteristic.apparent_wind_speed"
+           },
+           "2a73": { "name": "Apparent Wind Direction",
+                      "type": "org.bluetooth.characteristic.apparent_wind_direction"
+           },
+           "2a74": { "name": "Gust Factor",
+                      "type": "org.bluetooth.characteristic.gust_factor"
+           },
+           "2a75": { "name": "Pollen Concentration",
+                      "type": "org.bluetooth.characteristic.pollen_concentration"
+           },
+           "2a76": { "name": "UV Index",
+                      "type": "org.bluetooth.characteristic.uv_index"
+           },
+           "2a77": { "name": "Irradiance",
+                      "type": "org.bluetooth.characteristic.irradiance"
+           },
+           "2a78": { "name": "Rainfall",
+                      "type": "org.bluetooth.characteristic.rainfall"
+           },
+           "2a79": { "name": "Wind Chill",
+                      "type": "org.bluetooth.characteristic.wind_chill"
+           },
+           "2a7a": { "name": "Heat Index",
+                      "type": "org.bluetooth.characteristic.heat_index"
+           },
+           "2a7b": { "name": "Dew Point",
+                      "type": "org.bluetooth.characteristic.dew_point"
+           },
+           "2a7d": { "name": "Descriptor Value Changed",
+                      "type": "org.bluetooth.characteristic.descriptor_value_change"
+           },
+           "2a7e": { "name": "Aerobic Heart Rate Lower Limit",
+                      "type": "org.bluetooth.characteristic.aerobic_heart_rate_lower_limit"
+           },
+           "2a7f": { "name": "Aerobic Threshold",
+                      "type": "org.bluetooth.characteristic.aerobic_threshold"
+           },
+           "2a80": { "name": "Age",
+                      "type": "org.bluetooth.characteristic.age"
+           },
+           "2a81": { "name": "Anaerobic Heart Rate Lower Limit",
+                      "type": "org.bluetooth.characteristic.anaerobic_heart_rate_lower_limit"
+           },
+           "2a82": { "name": "Anaerobic Heart Rate Upper Limit",
+                      "type": "org.bluetooth.characteristic.anaerobic_heart_rate_upper_limit"
+           },
+           "2a83": { "name": "Anaerobic Threshold",
+                      "type": "org.bluetooth.characteristic.anaerobic_threshold"
+           },
+           "2a84": { "name": "Aerobic Heart Rate Upper Limit",
+                      "type": "org.bluetooth.characteristic.aerobic_heart_rate_upper_limit"
+           },
+           "2a85": { "name": "Date of Birth",
+                      "type": "org.bluetooth.characteristic.date_of_birth"
+           },
+           "2a86": { "name": "Date of Threshold Assessment",
+                      "type": "org.bluetooth.characteristic.date_of_threshold_assessment"
+           },
+           "2a87": { "name": "Email Address",
+                      "type": "org.bluetooth.characteristic.email_address"
+           },
+           "2a88": { "name": "Fat Burn Heart Rate Lower Limit",
+                      "type": "org.bluetooth.characteristic.fat_burn_heart_lower_limit"
+           },
+           "2a89": { "name": "Fat Burn Heart Rate Upper Limit",
+                      "type": "org.bluetooth.characteristic.fat_burn_heart_upper_limit"
+           },
+           "2a8a": { "name": "First Name",
+                      "type": "org.bluetooth.characteristic.first_name"
+           },
+           "2a8b": { "name": "Five Zone Heart Rate Limits",
+                      "type": "org.bluetooth.characteristic.five_zone_heart_rate_limits"
+           },
+           "2a8c": { "name": "Gender",
+                      "type": "org.bluetooth.characteristic.gender"
+           },
+           "2a8d": { "name": "Heart Rate Max",
+                      "type": "org.bluetooth.characteristic.heart_rate_max"
+           },
+           "2a8e": { "name": "Height",
+                      "type": "org.bluetooth.characteristic.height"
+           },
+           "2a8f": { "name": "Hip Circumference",
+                      "type": "org.bluetooth.characteristic.hip_circumference"
+           },
+           "2a90": { "name": "Last Name",
+                      "type": "org.bluetooth.characteristic.last_name"
+           },
+           "2a91": { "name": "Maximum Recommended Heart Rate",
+                      "type": "org.bluetooth.characteristic.maximum_recommended_heart_rate"
+           },
+           "2a92": { "name": "Resting Heart Rate",
+                      "type": "org.bluetooth.characteristic.resting_heart_rate"
+           },
+           "2a93": { "name": "Sport Type for Aerobic and Anaerobic Threshold",
+                      "type": "org.bluetooth.characteristic.sport_type_for_aerobic_and_anaerobic_threshold"
+           },
+           "2a94": { "name": "Three Zone Heart Rate Limits",
+                      "type": "org.bluetooth.characteristic.three_zone_heart_rate_limits"
+           },
+           "2a95": { "name": "Two Zone Heart Rate Limit",
+                      "type": "org.bluetooth.characteristic.two_zone_heart_rate_limit"
+           },
+           "2a96": { "name": "VO2 Max",
+                      "type": "org.bluetooth.characteristic.vo2_max"
+           },
+           "2a97": { "name": "Waist Circumference",
+                      "type": "org.bluetooth.characteristic.waist_circumference"
+           },
+           "2a98": { "name": "Weight",
+                      "type": "org.bluetooth.characteristic.weight"
+           },
+           "2a99": { "name": "Database Change Increment",
+                      "type": "org.bluetooth.characteristic.database_change_increment"
+           },
+           "2a9a": { "name": "User Index",
+                      "type": "org.bluetooth.characteristic.user_index"
+           },
+           "2a9b": { "name": "Body Composition Feature",
+                      "type": "org.bluetooth.characteristic.body_composition_feature"
+           },
+           "2a9c": { "name": "Body Composition Measurement",
+                      "type": "org.bluetooth.characteristic.body_composition_measurement"
+           },
+           "2a9d": { "name": "Weight Measurement",
+                      "type": "org.bluetooth.characteristic.weight_measurement"
+           },
+           "2a9e": { "name": "Weight Scale Feature",
+                      "type": "org.bluetooth.characteristic.weight_scale_feature"
+           },
+           "2a9f": { "name": "User Control Point",
+                      "type": "org.bluetooth.characteristic.user_control_point"
+           },
+           "2aa0": { "name": "Magnetic Flux Density - 2D",
+                      "type": "org.bluetooth.characteristic.magnetic_flux_density_2d"
+           },
+           "2aa1": { "name": "Magnetic Flux Density - 3D",
+                      "type": "org.bluetooth.characteristic.magnetic_flux_density_3d"
+           },
+           "2aa2": { "name": "Language",
+                      "type": "org.bluetooth.characteristic.language"
+           },
+           "2aa3": { "name": "Barometric Pressure Trend",
+                      "type": "org.bluetooth.characteristic.barometric_pressure_trend"
+           },
+           "2aa4": { "name": "Bond Management Control Point",
+                      "type": "org.bluetooth.characteristic.bond_management_control_point"
+           },
+           "2aa5": { "name": "Bond Management Feature",
+                      "type": "org.bluetooth.characteristic.bond_management_feature"
+           },
+           "2aa6": { "name": "Central Address Resolution",
+                      "type": "org.bluetooth.characteristic.central_address_resolution"
+           },
+           "2aa7": { "name": "CGM Measurement",
+                      "type": "org.bluetooth.characteristic.cgm_measurement"
+           },
+           "2aa8": { "name": "CGM Feature",
+                      "type": "org.bluetooth.characteristic.cgm_feature"
+           },
+           "2aa9": { "name": "CGM Status",
+                      "type": "org.bluetooth.characteristic.cgm_status"
+           },
+           "2aaa": { "name": "CGM Session Start Time",
+                      "type": "org.bluetooth.characteristic.cgm_session_start_time"
+           },
+           "2aab": { "name": "CGM Session Run Time",
+                      "type": "org.bluetooth.characteristic.cgm_session_run_time"
+           },
+           "2aac": { "name": "CGM Specific Ops Control Point",
+                      "type": "org.bluetooth.characteristic.cgm_specific_ops_control_point"
+           }
+};
+}, 329, null, "noble/lib/characteristics.json");
+__d(/* noble/lib/descriptor.js */function(global, require, module, exports) {var debug = require(318    )('descriptor'); // 318 = debug
+
+var events = require(321     ); // 321 = events
+var util = require(322   ); // 322 = util
+
+var descriptors = require(331                 ); // 331 = ./descriptors.json
+
+function Descriptor(noble, peripheralId, serviceUuid, characteristicUuid, uuid) {
+  this._noble = noble;
+  this._peripheralId = peripheralId;
+  this._serviceUuid = serviceUuid;
+  this._characteristicUuid = characteristicUuid;
+
+  this.uuid = uuid;
+  this.name = null;
+  this.type = null;
+
+  var descriptor = descriptors[uuid];
+  if (descriptor) {
+    this.name = descriptor.name;
+    this.type = descriptor.type;
+  }
+}
+
+util.inherits(Descriptor, events.EventEmitter);
+
+Descriptor.prototype.toString = function () {
+  return JSON.stringify({
+    uuid: this.uuid,
+    name: this.name,
+    type: this.type
+  });
+};
+
+Descriptor.prototype.readValue = function (callback) {
+  if (callback) {
+    this.once('valueRead', function (data) {
+      callback(null, data);
+    });
+  }
+  this._noble.readValue(this._peripheralId, this._serviceUuid, this._characteristicUuid, this.uuid);
+};
+
+Descriptor.prototype.writeValue = function (data, callback) {
+  if (!(data instanceof Buffer)) {
+    throw new Error('data must be a Buffer');
+  }
+
+  if (callback) {
+    this.once('valueWrite', function () {
+      callback(null);
+    });
+  }
+  this._noble.writeValue(this._peripheralId, this._serviceUuid, this._characteristicUuid, this.uuid, data);
+};
+
+module.exports = Descriptor;
+}, 330, null, "noble/lib/descriptor.js");
+__d(/* noble/lib/descriptors.json */function(global, require, module, exports) {module.exports = module.exports = {
+           "2900": { "name": "Characteristic Extended Properties",
+                      "type": "org.bluetooth.descriptor.gatt.characteristic_extended_properties"
+           },
+           "2901": { "name": "Characteristic User Description",
+                      "type": "org.bluetooth.descriptor.gatt.characteristic_user_description"
+           },
+           "2902": { "name": "Client Characteristic Configuration",
+                      "type": "org.bluetooth.descriptor.gatt.client_characteristic_configuration"
+           },
+           "2903": { "name": "Server Characteristic Configuration",
+                      "type": "org.bluetooth.descriptor.gatt.server_characteristic_configuration"
+           },
+           "2904": { "name": "Characteristic Presentation Format",
+                      "type": "org.bluetooth.descriptor.gatt.characteristic_presentation_format"
+           },
+           "2905": { "name": "Characteristic Aggregate Format",
+                      "type": "org.bluetooth.descriptor.gatt.characteristic_aggregate_format"
+           },
+           "2906": { "name": "Valid Range",
+                      "type": "org.bluetooth.descriptor.valid_range"
+           },
+           "2907": { "name": "External Report Reference",
+                      "type": "org.bluetooth.descriptor.external_report_reference"
+           },
+           "2908": { "name": "Report Reference",
+                      "type": "org.bluetooth.descriptor.report_reference"
+           },
+           "2909": { "name": "Number of Digitals",
+                      "type": "org.bluetooth.descriptor.number_of_digitals"
+           },
+           "290a": { "name": "Value Trigger Setting",
+                      "type": "org.bluetooth.descriptor.value_trigger_setting"
+           },
+           "290b": { "name": "Environmental Sensing Configuration",
+                      "type": "org.bluetooth.descriptor.environmental_sensing_configuration"
+           },
+           "290c": { "name": "Environmental Sensing Measurement",
+                      "type": "org.bluetooth.descriptor.environmental_sensing_measurement"
+           },
+           "290d": { "name": "Environmental Sensing Trigger Setting",
+                      "type": "org.bluetooth.descriptor.environmental_sensing_trigger_setting"
+           },
+           "290e": { "name": "Time Trigger Setting",
+                      "type": "org.bluetooth.descriptor.time_trigger_setting"
+           }
+};
+}, 331, null, "noble/lib/descriptors.json");
+__d(/* react-native-ble/bindings.android.js */function(global, require, module, exports) {var debug = require(318    )('android-bindings'); // 318 = debug
+
+var events = require(321     ); // 321 = events
+var util = require(322   ); // 322 = util
+
+var _require = require(26            ), // 26 = react-native
+    DeviceEventEmitter = _require.DeviceEventEmitter,
+    RNBLE = _require.NativeModules.RNBLE;
+
+var Buffer = require(333     ).Buffer; // 333 = buffer
+
+var NobleBindings = function NobleBindings() {
+  DeviceEventEmitter.addListener('ble.connect', this.onConnect.bind(this));
+  DeviceEventEmitter.addListener('ble.disconnect', this.onDisconnect.bind(this));
+  DeviceEventEmitter.addListener('ble.stateChange', this.onStateChange.bind(this));
+  DeviceEventEmitter.addListener('ble.discover', this.onDiscover.bind(this));
+  DeviceEventEmitter.addListener('ble.servicesDiscover', this.onServicesDiscover.bind(this));
+  DeviceEventEmitter.addListener('ble.includedServicesDiscover', this.onIncludedServicesDiscover.bind(this));
+  DeviceEventEmitter.addListener('ble.characteristicsDiscover', this.onCharacteristicsDiscover.bind(this));
+  DeviceEventEmitter.addListener('ble.descriptorsDiscover', this.onDescriptorsDiscover.bind(this));
+  DeviceEventEmitter.addListener('ble.data', this.onData.bind(this));
+  DeviceEventEmitter.addListener('ble.write', this.onWrite.bind(this));
+  DeviceEventEmitter.addListener('ble.notify', this.onNotify.bind(this));
+};
+
+util.inherits(NobleBindings, events.EventEmitter);
+
+NobleBindings.prototype.onConnect = function (_ref) {
+  var peripheralUuid = _ref.peripheralUuid,
+      _ref$error = _ref.error,
+      error = _ref$error === undefined ? null : _ref$error;
+
+  this.emit('connect', peripheralUuid, error);
+};
+
+NobleBindings.prototype.onDisconnect = function (_ref2) {
+  var peripheralUuid = _ref2.peripheralUuid,
+      _ref2$error = _ref2.error,
+      error = _ref2$error === undefined ? null : _ref2$error;
+
+  this.emit('disconnect', peripheralUuid, error);
+};
+
+NobleBindings.prototype.onServicesDiscover = function (_ref3) {
+  var peripheralUuid = _ref3.peripheralUuid,
+      serviceUuids = _ref3.serviceUuids;
+
+  this.emit('servicesDiscover', peripheralUuid, serviceUuids);
+};
+
+NobleBindings.prototype.onIncludedServicesDiscover = function (_ref4) {
+  var peripheralUuid = _ref4.peripheralUuid,
+      serviceUuid = _ref4.serviceUuid,
+      includedServiceUuids = _ref4.includedServiceUuids;
+
+  this.emit('includedServicesDiscover', peripheralUuid, serviceUuid, includedServiceUuids);
+};
+
+NobleBindings.prototype.onCharacteristicsDiscover = function (_ref5) {
+  var peripheralUuid = _ref5.peripheralUuid,
+      serviceUuid = _ref5.serviceUuid,
+      characteristics = _ref5.characteristics;
+
+  this.emit('characteristicsDiscover', peripheralUuid, serviceUuid, characteristics);
+};
+
+NobleBindings.prototype.onDescriptorsDiscover = function (_ref6) {
+  var peripheralUuid = _ref6.peripheralUuid,
+      serviceUuid = _ref6.serviceUuid,
+      characteristicUuid = _ref6.characteristicUuid,
+      descriptors = _ref6.descriptors;
+
+  this.emit('descriptorsDiscover', peripheralUuid, serviceUuid, characteristicUuid, descriptors);
+};
+
+NobleBindings.prototype.onNotify = function (_ref7) {
+  var peripheralUuid = _ref7.peripheralUuid,
+      serviceUuid = _ref7.serviceUuid,
+      characteristicUuid = _ref7.characteristicUuid,
+      notifyState = _ref7.notifyState;
+
+  this.emit('notify', peripheralUuid, serviceUuid, characteristicUuid, notifyState);
+};
+
+NobleBindings.prototype.onData = function (_ref8) {
+  var peripheralUuid = _ref8.peripheralUuid,
+      serviceUuid = _ref8.serviceUuid,
+      characteristicUuid = _ref8.characteristicUuid,
+      data = _ref8.data,
+      isNotification = _ref8.isNotification;
+
+  var processedData = new Buffer(JSON.parse(data), 'base64');
+  this.emit('data', peripheralUuid, serviceUuid, characteristicUuid, processedData, isNotification);
+  this.emit('read', peripheralUuid, serviceUuid, characteristicUuid, processedData, isNotification);
+};
+
+NobleBindings.prototype.onStateChange = function (params) {
+  debug('state change ' + params.state);
+  this.emit('stateChange', params.state);
+};
+
+NobleBindings.prototype.onDiscover = function (_ref9) {
+  var id = _ref9.id,
+      address = _ref9.address,
+      addressType = _ref9.addressType,
+      advertisement = _ref9.advertisement,
+      connectable = _ref9.connectable,
+      rssi = _ref9.rssi;
+
+  if (advertisement.manufacturerData) {
+    advertisement.manufacturerData = new Buffer(JSON.parse(advertisement.manufacturerData), 'base64');
+  }
+
+  if (advertisement.serviceData) {
+    advertisement.serviceData = advertisement.serviceData.map(function (_ref10) {
+      var uuid = _ref10.uuid,
+          data = _ref10.data;
+      return {
+        uuid: uuid,
+        data: new Buffer(JSON.parse(data), 'base64')
+      };
+    });
+  }
+
+  this.emit('discover', id, address, addressType, connectable, advertisement, rssi);
+};
+
+NobleBindings.prototype.onWrite = function (_ref11) {
+  var peripheralUuid = _ref11.peripheralUuid,
+      serviceUuid = _ref11.serviceUuid,
+      characteristicUuid = _ref11.characteristicUuid;
+
+  this.emit('write', peripheralUuid, serviceUuid, characteristicUuid);
+};
+
+var nobleBindings = new NobleBindings();
+
+nobleBindings.init = function () {
+  setTimeout(function () {
+    RNBLE.getState();
+  }, 1000);
+};
+
+nobleBindings.connect = function (deviceUuid) {
+  RNBLE.connect(deviceUuid);
+};
+
+nobleBindings.disconnect = function (deviceUuid) {
+  RNBLE.disconnect(deviceUuid);
+};
+
+nobleBindings.startScanning = function (serviceUuids, allowDuplicates) {
+  var duplicates = allowDuplicates || false;
+  var serviceUuid = serviceUuids ? serviceUuids.pop() : null;
+  RNBLE.startScanning(toAppleUuids(serviceUuids), duplicates);
+  this.emit('scanStart');
+};
+
+nobleBindings.stopScanning = function () {
+  RNBLE.stopScanning();
+  this.emit('scanStop');
+};
+
+nobleBindings.discoverServices = function (deviceUuid, uuids) {
+  RNBLE.discoverServices(deviceUuid, toAppleUuids(uuids));
+};
+
+nobleBindings.discoverIncludedServices = function (deviceUuid, serviceUuid, serviceUuids) {
+  throw new Error('discoverIncludedServices not yet implemented');
+};
+
+nobleBindings.discoverCharacteristics = function (deviceUuid, serviceUuid, characteristicUuids) {
+  RNBLE.discoverCharacteristics(deviceUuid, toAppleUuid(serviceUuid), toAppleUuids(characteristicUuids));
+};
+
+nobleBindings.discoverDescriptors = function (deviceUuid, serviceUuid, characteristicUuid) {
+  RNBLE.discoverDescriptors(deviceUuid, toAppleUuid(serviceUuid), toAppleUuid(characteristicUuid));
+};
+
+nobleBindings.read = function (deviceUuid, serviceUuid, characteristicUuid) {
+  RNBLE.read(deviceUuid, toAppleUuid(serviceUuid), toAppleUuid(characteristicUuid));
+};
+
+nobleBindings.write = function (deviceUuid, serviceUuid, characteristicUuid, data, withoutResponse) {
+  RNBLE.write(deviceUuid, toAppleUuid(serviceUuid), toAppleUuid(characteristicUuid), data.toString("base64"), withoutResponse);
+};
+
+nobleBindings.notify = function (deviceUuid, serviceUuid, characteristicUuid, notify) {
+  RNBLE.notify(deviceUuid, toAppleUuid(serviceUuid), toAppleUuid(characteristicUuid), notify);
+};
+
+function toAppleUuid(uuid) {
+  return uuid.replace(/(\S{8})(\S{4})(\S{4})(\S{4})(\S{12})/, "$1-$2-$3-$4-$5").toUpperCase();
+}
+
+function toAppleUuids(uuids) {
+  var convertedUuids = [];
+
+  if (uuids) {
+    uuids.forEach(function (uuid) {
+      convertedUuids.push(toAppleUuid(uuid));
+    });
+  }
+
+  return convertedUuids;
+}
+
+module.exports = nobleBindings;
+}, 332, null, "react-native-ble/bindings.android.js");
+__d(/* buffer/index.js */function(global, require, module, exports) {/*!
+ * The buffer module from node.js, for the browser.
+ *
+ * @author   Feross Aboukhadijeh <feross@feross.org> <http://feross.org>
+ * @license  MIT
+ */
+'use strict';
+
+var base64 = require(73         ); // 73 = base64-js
+var ieee754 = require(334      ); // 334 = ieee754
+var isArray = require(335      ); // 335 = isarray
+
+exports.Buffer = Buffer;
+exports.SlowBuffer = SlowBuffer;
+exports.INSPECT_MAX_BYTES = 50;
+
+Buffer.TYPED_ARRAY_SUPPORT = global.TYPED_ARRAY_SUPPORT !== undefined ? global.TYPED_ARRAY_SUPPORT : typedArraySupport();
+
+exports.kMaxLength = kMaxLength();
+
+function typedArraySupport() {
+  try {
+    var arr = new Uint8Array(1);
+    arr.__proto__ = { __proto__: Uint8Array.prototype, foo: function foo() {
+        return 42;
+      } };
+    return arr.foo() === 42 && typeof arr.subarray === 'function' && arr.subarray(1, 1).byteLength === 0;
+  } catch (e) {
+    return false;
+  }
+}
+
+function kMaxLength() {
+  return Buffer.TYPED_ARRAY_SUPPORT ? 0x7fffffff : 0x3fffffff;
+}
+
+function createBuffer(that, length) {
+  if (kMaxLength() < length) {
+    throw new RangeError('Invalid typed array length');
+  }
+  if (Buffer.TYPED_ARRAY_SUPPORT) {
+    that = new Uint8Array(length);
+    that.__proto__ = Buffer.prototype;
+  } else {
+    if (that === null) {
+      that = new Buffer(length);
+    }
+    that.length = length;
+  }
+
+  return that;
+}
+
+function Buffer(arg, encodingOrOffset, length) {
+  if (!Buffer.TYPED_ARRAY_SUPPORT && !(this instanceof Buffer)) {
+    return new Buffer(arg, encodingOrOffset, length);
+  }
+
+  if (typeof arg === 'number') {
+    if (typeof encodingOrOffset === 'string') {
+      throw new Error('If encoding is specified then the first argument must be a string');
+    }
+    return allocUnsafe(this, arg);
+  }
+  return from(this, arg, encodingOrOffset, length);
+}
+
+Buffer.poolSize = 8192;
+Buffer._augment = function (arr) {
+  arr.__proto__ = Buffer.prototype;
+  return arr;
+};
+
+function from(that, value, encodingOrOffset, length) {
+  if (typeof value === 'number') {
+    throw new TypeError('"value" argument must not be a number');
+  }
+
+  if (typeof ArrayBuffer !== 'undefined' && value instanceof ArrayBuffer) {
+    return fromArrayBuffer(that, value, encodingOrOffset, length);
+  }
+
+  if (typeof value === 'string') {
+    return fromString(that, value, encodingOrOffset);
+  }
+
+  return fromObject(that, value);
+}
+
+Buffer.from = function (value, encodingOrOffset, length) {
+  return from(null, value, encodingOrOffset, length);
+};
+
+if (Buffer.TYPED_ARRAY_SUPPORT) {
+  Buffer.prototype.__proto__ = Uint8Array.prototype;
+  Buffer.__proto__ = Uint8Array;
+  if (typeof Symbol !== 'undefined' && (typeof Symbol === 'function' ? Symbol.species : '@@species') && Buffer[typeof Symbol === 'function' ? Symbol.species : '@@species'] === Buffer) {
+    Object.defineProperty(Buffer, typeof Symbol === 'function' ? Symbol.species : '@@species', {
+      value: null,
+      configurable: true
+    });
+  }
+}
+
+function assertSize(size) {
+  if (typeof size !== 'number') {
+    throw new TypeError('"size" argument must be a number');
+  } else if (size < 0) {
+    throw new RangeError('"size" argument must not be negative');
+  }
+}
+
+function alloc(that, size, fill, encoding) {
+  assertSize(size);
+  if (size <= 0) {
+    return createBuffer(that, size);
+  }
+  if (fill !== undefined) {
+    return typeof encoding === 'string' ? createBuffer(that, size).fill(fill, encoding) : createBuffer(that, size).fill(fill);
+  }
+  return createBuffer(that, size);
+}
+
+Buffer.alloc = function (size, fill, encoding) {
+  return alloc(null, size, fill, encoding);
+};
+
+function allocUnsafe(that, size) {
+  assertSize(size);
+  that = createBuffer(that, size < 0 ? 0 : checked(size) | 0);
+  if (!Buffer.TYPED_ARRAY_SUPPORT) {
+    for (var i = 0; i < size; ++i) {
+      that[i] = 0;
+    }
+  }
+  return that;
+}
+
+Buffer.allocUnsafe = function (size) {
+  return allocUnsafe(null, size);
+};
+
+Buffer.allocUnsafeSlow = function (size) {
+  return allocUnsafe(null, size);
+};
+
+function fromString(that, string, encoding) {
+  if (typeof encoding !== 'string' || encoding === '') {
+    encoding = 'utf8';
+  }
+
+  if (!Buffer.isEncoding(encoding)) {
+    throw new TypeError('"encoding" must be a valid string encoding');
+  }
+
+  var length = byteLength(string, encoding) | 0;
+  that = createBuffer(that, length);
+
+  var actual = that.write(string, encoding);
+
+  if (actual !== length) {
+    that = that.slice(0, actual);
+  }
+
+  return that;
+}
+
+function fromArrayLike(that, array) {
+  var length = array.length < 0 ? 0 : checked(array.length) | 0;
+  that = createBuffer(that, length);
+  for (var i = 0; i < length; i += 1) {
+    that[i] = array[i] & 255;
+  }
+  return that;
+}
+
+function fromArrayBuffer(that, array, byteOffset, length) {
+  array.byteLength;
+
+  if (byteOffset < 0 || array.byteLength < byteOffset) {
+    throw new RangeError('\'offset\' is out of bounds');
+  }
+
+  if (array.byteLength < byteOffset + (length || 0)) {
+    throw new RangeError('\'length\' is out of bounds');
+  }
+
+  if (byteOffset === undefined && length === undefined) {
+    array = new Uint8Array(array);
+  } else if (length === undefined) {
+    array = new Uint8Array(array, byteOffset);
+  } else {
+    array = new Uint8Array(array, byteOffset, length);
+  }
+
+  if (Buffer.TYPED_ARRAY_SUPPORT) {
+    that = array;
+    that.__proto__ = Buffer.prototype;
+  } else {
+    that = fromArrayLike(that, array);
+  }
+  return that;
+}
+
+function fromObject(that, obj) {
+  if (Buffer.isBuffer(obj)) {
+    var len = checked(obj.length) | 0;
+    that = createBuffer(that, len);
+
+    if (that.length === 0) {
+      return that;
+    }
+
+    obj.copy(that, 0, 0, len);
+    return that;
+  }
+
+  if (obj) {
+    if (typeof ArrayBuffer !== 'undefined' && obj.buffer instanceof ArrayBuffer || 'length' in obj) {
+      if (typeof obj.length !== 'number' || isnan(obj.length)) {
+        return createBuffer(that, 0);
+      }
+      return fromArrayLike(that, obj);
+    }
+
+    if (obj.type === 'Buffer' && isArray(obj.data)) {
+      return fromArrayLike(that, obj.data);
+    }
+  }
+
+  throw new TypeError('First argument must be a string, Buffer, ArrayBuffer, Array, or array-like object.');
+}
+
+function checked(length) {
+  if (length >= kMaxLength()) {
+    throw new RangeError('Attempt to allocate Buffer larger than maximum ' + 'size: 0x' + kMaxLength().toString(16) + ' bytes');
+  }
+  return length | 0;
+}
+
+function SlowBuffer(length) {
+  if (+length != length) {
+    length = 0;
+  }
+  return Buffer.alloc(+length);
+}
+
+Buffer.isBuffer = function isBuffer(b) {
+  return !!(b != null && b._isBuffer);
+};
+
+Buffer.compare = function compare(a, b) {
+  if (!Buffer.isBuffer(a) || !Buffer.isBuffer(b)) {
+    throw new TypeError('Arguments must be Buffers');
+  }
+
+  if (a === b) return 0;
+
+  var x = a.length;
+  var y = b.length;
+
+  for (var i = 0, len = Math.min(x, y); i < len; ++i) {
+    if (a[i] !== b[i]) {
+      x = a[i];
+      y = b[i];
+      break;
+    }
+  }
+
+  if (x < y) return -1;
+  if (y < x) return 1;
+  return 0;
+};
+
+Buffer.isEncoding = function isEncoding(encoding) {
+  switch (String(encoding).toLowerCase()) {
+    case 'hex':
+    case 'utf8':
+    case 'utf-8':
+    case 'ascii':
+    case 'latin1':
+    case 'binary':
+    case 'base64':
+    case 'ucs2':
+    case 'ucs-2':
+    case 'utf16le':
+    case 'utf-16le':
+      return true;
+    default:
+      return false;
+  }
+};
+
+Buffer.concat = function concat(list, length) {
+  if (!isArray(list)) {
+    throw new TypeError('"list" argument must be an Array of Buffers');
+  }
+
+  if (list.length === 0) {
+    return Buffer.alloc(0);
+  }
+
+  var i;
+  if (length === undefined) {
+    length = 0;
+    for (i = 0; i < list.length; ++i) {
+      length += list[i].length;
+    }
+  }
+
+  var buffer = Buffer.allocUnsafe(length);
+  var pos = 0;
+  for (i = 0; i < list.length; ++i) {
+    var buf = list[i];
+    if (!Buffer.isBuffer(buf)) {
+      throw new TypeError('"list" argument must be an Array of Buffers');
+    }
+    buf.copy(buffer, pos);
+    pos += buf.length;
+  }
+  return buffer;
+};
+
+function byteLength(string, encoding) {
+  if (Buffer.isBuffer(string)) {
+    return string.length;
+  }
+  if (typeof ArrayBuffer !== 'undefined' && typeof ArrayBuffer.isView === 'function' && (ArrayBuffer.isView(string) || string instanceof ArrayBuffer)) {
+    return string.byteLength;
+  }
+  if (typeof string !== 'string') {
+    string = '' + string;
+  }
+
+  var len = string.length;
+  if (len === 0) return 0;
+
+  var loweredCase = false;
+  for (;;) {
+    switch (encoding) {
+      case 'ascii':
+      case 'latin1':
+      case 'binary':
+        return len;
+      case 'utf8':
+      case 'utf-8':
+      case undefined:
+        return utf8ToBytes(string).length;
+      case 'ucs2':
+      case 'ucs-2':
+      case 'utf16le':
+      case 'utf-16le':
+        return len * 2;
+      case 'hex':
+        return len >>> 1;
+      case 'base64':
+        return base64ToBytes(string).length;
+      default:
+        if (loweredCase) return utf8ToBytes(string).length;
+        encoding = ('' + encoding).toLowerCase();
+        loweredCase = true;
+    }
+  }
+}
+Buffer.byteLength = byteLength;
+
+function slowToString(encoding, start, end) {
+  var loweredCase = false;
+
+  if (start === undefined || start < 0) {
+    start = 0;
+  }
+
+  if (start > this.length) {
+    return '';
+  }
+
+  if (end === undefined || end > this.length) {
+    end = this.length;
+  }
+
+  if (end <= 0) {
+    return '';
+  }
+
+  end >>>= 0;
+  start >>>= 0;
+
+  if (end <= start) {
+    return '';
+  }
+
+  if (!encoding) encoding = 'utf8';
+
+  while (true) {
+    switch (encoding) {
+      case 'hex':
+        return hexSlice(this, start, end);
+
+      case 'utf8':
+      case 'utf-8':
+        return utf8Slice(this, start, end);
+
+      case 'ascii':
+        return asciiSlice(this, start, end);
+
+      case 'latin1':
+      case 'binary':
+        return latin1Slice(this, start, end);
+
+      case 'base64':
+        return base64Slice(this, start, end);
+
+      case 'ucs2':
+      case 'ucs-2':
+      case 'utf16le':
+      case 'utf-16le':
+        return utf16leSlice(this, start, end);
+
+      default:
+        if (loweredCase) throw new TypeError('Unknown encoding: ' + encoding);
+        encoding = (encoding + '').toLowerCase();
+        loweredCase = true;
+    }
+  }
+}
+
+Buffer.prototype._isBuffer = true;
+
+function swap(b, n, m) {
+  var i = b[n];
+  b[n] = b[m];
+  b[m] = i;
+}
+
+Buffer.prototype.swap16 = function swap16() {
+  var len = this.length;
+  if (len % 2 !== 0) {
+    throw new RangeError('Buffer size must be a multiple of 16-bits');
+  }
+  for (var i = 0; i < len; i += 2) {
+    swap(this, i, i + 1);
+  }
+  return this;
+};
+
+Buffer.prototype.swap32 = function swap32() {
+  var len = this.length;
+  if (len % 4 !== 0) {
+    throw new RangeError('Buffer size must be a multiple of 32-bits');
+  }
+  for (var i = 0; i < len; i += 4) {
+    swap(this, i, i + 3);
+    swap(this, i + 1, i + 2);
+  }
+  return this;
+};
+
+Buffer.prototype.swap64 = function swap64() {
+  var len = this.length;
+  if (len % 8 !== 0) {
+    throw new RangeError('Buffer size must be a multiple of 64-bits');
+  }
+  for (var i = 0; i < len; i += 8) {
+    swap(this, i, i + 7);
+    swap(this, i + 1, i + 6);
+    swap(this, i + 2, i + 5);
+    swap(this, i + 3, i + 4);
+  }
+  return this;
+};
+
+Buffer.prototype.toString = function toString() {
+  var length = this.length | 0;
+  if (length === 0) return '';
+  if (arguments.length === 0) return utf8Slice(this, 0, length);
+  return slowToString.apply(this, arguments);
+};
+
+Buffer.prototype.equals = function equals(b) {
+  if (!Buffer.isBuffer(b)) throw new TypeError('Argument must be a Buffer');
+  if (this === b) return true;
+  return Buffer.compare(this, b) === 0;
+};
+
+Buffer.prototype.inspect = function inspect() {
+  var str = '';
+  var max = exports.INSPECT_MAX_BYTES;
+  if (this.length > 0) {
+    str = this.toString('hex', 0, max).match(/.{2}/g).join(' ');
+    if (this.length > max) str += ' ... ';
+  }
+  return '<Buffer ' + str + '>';
+};
+
+Buffer.prototype.compare = function compare(target, start, end, thisStart, thisEnd) {
+  if (!Buffer.isBuffer(target)) {
+    throw new TypeError('Argument must be a Buffer');
+  }
+
+  if (start === undefined) {
+    start = 0;
+  }
+  if (end === undefined) {
+    end = target ? target.length : 0;
+  }
+  if (thisStart === undefined) {
+    thisStart = 0;
+  }
+  if (thisEnd === undefined) {
+    thisEnd = this.length;
+  }
+
+  if (start < 0 || end > target.length || thisStart < 0 || thisEnd > this.length) {
+    throw new RangeError('out of range index');
+  }
+
+  if (thisStart >= thisEnd && start >= end) {
+    return 0;
+  }
+  if (thisStart >= thisEnd) {
+    return -1;
+  }
+  if (start >= end) {
+    return 1;
+  }
+
+  start >>>= 0;
+  end >>>= 0;
+  thisStart >>>= 0;
+  thisEnd >>>= 0;
+
+  if (this === target) return 0;
+
+  var x = thisEnd - thisStart;
+  var y = end - start;
+  var len = Math.min(x, y);
+
+  var thisCopy = this.slice(thisStart, thisEnd);
+  var targetCopy = target.slice(start, end);
+
+  for (var i = 0; i < len; ++i) {
+    if (thisCopy[i] !== targetCopy[i]) {
+      x = thisCopy[i];
+      y = targetCopy[i];
+      break;
+    }
+  }
+
+  if (x < y) return -1;
+  if (y < x) return 1;
+  return 0;
+};
+
+function bidirectionalIndexOf(buffer, val, byteOffset, encoding, dir) {
+  if (buffer.length === 0) return -1;
+
+  if (typeof byteOffset === 'string') {
+    encoding = byteOffset;
+    byteOffset = 0;
+  } else if (byteOffset > 0x7fffffff) {
+    byteOffset = 0x7fffffff;
+  } else if (byteOffset < -0x80000000) {
+    byteOffset = -0x80000000;
+  }
+  byteOffset = +byteOffset;
+  if (isNaN(byteOffset)) {
+    byteOffset = dir ? 0 : buffer.length - 1;
+  }
+
+  if (byteOffset < 0) byteOffset = buffer.length + byteOffset;
+  if (byteOffset >= buffer.length) {
+    if (dir) return -1;else byteOffset = buffer.length - 1;
+  } else if (byteOffset < 0) {
+    if (dir) byteOffset = 0;else return -1;
+  }
+
+  if (typeof val === 'string') {
+    val = Buffer.from(val, encoding);
+  }
+
+  if (Buffer.isBuffer(val)) {
+    if (val.length === 0) {
+      return -1;
+    }
+    return arrayIndexOf(buffer, val, byteOffset, encoding, dir);
+  } else if (typeof val === 'number') {
+    val = val & 0xFF;
+    if (Buffer.TYPED_ARRAY_SUPPORT && typeof Uint8Array.prototype.indexOf === 'function') {
+      if (dir) {
+        return Uint8Array.prototype.indexOf.call(buffer, val, byteOffset);
+      } else {
+        return Uint8Array.prototype.lastIndexOf.call(buffer, val, byteOffset);
+      }
+    }
+    return arrayIndexOf(buffer, [val], byteOffset, encoding, dir);
+  }
+
+  throw new TypeError('val must be string, number or Buffer');
+}
+
+function arrayIndexOf(arr, val, byteOffset, encoding, dir) {
+  var indexSize = 1;
+  var arrLength = arr.length;
+  var valLength = val.length;
+
+  if (encoding !== undefined) {
+    encoding = String(encoding).toLowerCase();
+    if (encoding === 'ucs2' || encoding === 'ucs-2' || encoding === 'utf16le' || encoding === 'utf-16le') {
+      if (arr.length < 2 || val.length < 2) {
+        return -1;
+      }
+      indexSize = 2;
+      arrLength /= 2;
+      valLength /= 2;
+      byteOffset /= 2;
+    }
+  }
+
+  function read(buf, i) {
+    if (indexSize === 1) {
+      return buf[i];
+    } else {
+      return buf.readUInt16BE(i * indexSize);
+    }
+  }
+
+  var i;
+  if (dir) {
+    var foundIndex = -1;
+    for (i = byteOffset; i < arrLength; i++) {
+      if (read(arr, i) === read(val, foundIndex === -1 ? 0 : i - foundIndex)) {
+        if (foundIndex === -1) foundIndex = i;
+        if (i - foundIndex + 1 === valLength) return foundIndex * indexSize;
+      } else {
+        if (foundIndex !== -1) i -= i - foundIndex;
+        foundIndex = -1;
+      }
+    }
+  } else {
+    if (byteOffset + valLength > arrLength) byteOffset = arrLength - valLength;
+    for (i = byteOffset; i >= 0; i--) {
+      var found = true;
+      for (var j = 0; j < valLength; j++) {
+        if (read(arr, i + j) !== read(val, j)) {
+          found = false;
+          break;
+        }
+      }
+      if (found) return i;
+    }
+  }
+
+  return -1;
+}
+
+Buffer.prototype.includes = function includes(val, byteOffset, encoding) {
+  return this.indexOf(val, byteOffset, encoding) !== -1;
+};
+
+Buffer.prototype.indexOf = function indexOf(val, byteOffset, encoding) {
+  return bidirectionalIndexOf(this, val, byteOffset, encoding, true);
+};
+
+Buffer.prototype.lastIndexOf = function lastIndexOf(val, byteOffset, encoding) {
+  return bidirectionalIndexOf(this, val, byteOffset, encoding, false);
+};
+
+function hexWrite(buf, string, offset, length) {
+  offset = Number(offset) || 0;
+  var remaining = buf.length - offset;
+  if (!length) {
+    length = remaining;
+  } else {
+    length = Number(length);
+    if (length > remaining) {
+      length = remaining;
+    }
+  }
+
+  var strLen = string.length;
+  if (strLen % 2 !== 0) throw new TypeError('Invalid hex string');
+
+  if (length > strLen / 2) {
+    length = strLen / 2;
+  }
+  for (var i = 0; i < length; ++i) {
+    var parsed = parseInt(string.substr(i * 2, 2), 16);
+    if (isNaN(parsed)) return i;
+    buf[offset + i] = parsed;
+  }
+  return i;
+}
+
+function utf8Write(buf, string, offset, length) {
+  return blitBuffer(utf8ToBytes(string, buf.length - offset), buf, offset, length);
+}
+
+function asciiWrite(buf, string, offset, length) {
+  return blitBuffer(asciiToBytes(string), buf, offset, length);
+}
+
+function latin1Write(buf, string, offset, length) {
+  return asciiWrite(buf, string, offset, length);
+}
+
+function base64Write(buf, string, offset, length) {
+  return blitBuffer(base64ToBytes(string), buf, offset, length);
+}
+
+function ucs2Write(buf, string, offset, length) {
+  return blitBuffer(utf16leToBytes(string, buf.length - offset), buf, offset, length);
+}
+
+Buffer.prototype.write = function write(string, offset, length, encoding) {
+  if (offset === undefined) {
+    encoding = 'utf8';
+    length = this.length;
+    offset = 0;
+  } else if (length === undefined && typeof offset === 'string') {
+    encoding = offset;
+    length = this.length;
+    offset = 0;
+  } else if (isFinite(offset)) {
+    offset = offset | 0;
+    if (isFinite(length)) {
+      length = length | 0;
+      if (encoding === undefined) encoding = 'utf8';
+    } else {
+      encoding = length;
+      length = undefined;
+    }
+  } else {
+    throw new Error('Buffer.write(string, encoding, offset[, length]) is no longer supported');
+  }
+
+  var remaining = this.length - offset;
+  if (length === undefined || length > remaining) length = remaining;
+
+  if (string.length > 0 && (length < 0 || offset < 0) || offset > this.length) {
+    throw new RangeError('Attempt to write outside buffer bounds');
+  }
+
+  if (!encoding) encoding = 'utf8';
+
+  var loweredCase = false;
+  for (;;) {
+    switch (encoding) {
+      case 'hex':
+        return hexWrite(this, string, offset, length);
+
+      case 'utf8':
+      case 'utf-8':
+        return utf8Write(this, string, offset, length);
+
+      case 'ascii':
+        return asciiWrite(this, string, offset, length);
+
+      case 'latin1':
+      case 'binary':
+        return latin1Write(this, string, offset, length);
+
+      case 'base64':
+        return base64Write(this, string, offset, length);
+
+      case 'ucs2':
+      case 'ucs-2':
+      case 'utf16le':
+      case 'utf-16le':
+        return ucs2Write(this, string, offset, length);
+
+      default:
+        if (loweredCase) throw new TypeError('Unknown encoding: ' + encoding);
+        encoding = ('' + encoding).toLowerCase();
+        loweredCase = true;
+    }
+  }
+};
+
+Buffer.prototype.toJSON = function toJSON() {
+  return {
+    type: 'Buffer',
+    data: Array.prototype.slice.call(this._arr || this, 0)
+  };
+};
+
+function base64Slice(buf, start, end) {
+  if (start === 0 && end === buf.length) {
+    return base64.fromByteArray(buf);
+  } else {
+    return base64.fromByteArray(buf.slice(start, end));
+  }
+}
+
+function utf8Slice(buf, start, end) {
+  end = Math.min(buf.length, end);
+  var res = [];
+
+  var i = start;
+  while (i < end) {
+    var firstByte = buf[i];
+    var codePoint = null;
+    var bytesPerSequence = firstByte > 0xEF ? 4 : firstByte > 0xDF ? 3 : firstByte > 0xBF ? 2 : 1;
+
+    if (i + bytesPerSequence <= end) {
+      var secondByte, thirdByte, fourthByte, tempCodePoint;
+
+      switch (bytesPerSequence) {
+        case 1:
+          if (firstByte < 0x80) {
+            codePoint = firstByte;
+          }
+          break;
+        case 2:
+          secondByte = buf[i + 1];
+          if ((secondByte & 0xC0) === 0x80) {
+            tempCodePoint = (firstByte & 0x1F) << 0x6 | secondByte & 0x3F;
+            if (tempCodePoint > 0x7F) {
+              codePoint = tempCodePoint;
+            }
+          }
+          break;
+        case 3:
+          secondByte = buf[i + 1];
+          thirdByte = buf[i + 2];
+          if ((secondByte & 0xC0) === 0x80 && (thirdByte & 0xC0) === 0x80) {
+            tempCodePoint = (firstByte & 0xF) << 0xC | (secondByte & 0x3F) << 0x6 | thirdByte & 0x3F;
+            if (tempCodePoint > 0x7FF && (tempCodePoint < 0xD800 || tempCodePoint > 0xDFFF)) {
+              codePoint = tempCodePoint;
+            }
+          }
+          break;
+        case 4:
+          secondByte = buf[i + 1];
+          thirdByte = buf[i + 2];
+          fourthByte = buf[i + 3];
+          if ((secondByte & 0xC0) === 0x80 && (thirdByte & 0xC0) === 0x80 && (fourthByte & 0xC0) === 0x80) {
+            tempCodePoint = (firstByte & 0xF) << 0x12 | (secondByte & 0x3F) << 0xC | (thirdByte & 0x3F) << 0x6 | fourthByte & 0x3F;
+            if (tempCodePoint > 0xFFFF && tempCodePoint < 0x110000) {
+              codePoint = tempCodePoint;
+            }
+          }
+      }
+    }
+
+    if (codePoint === null) {
+      codePoint = 0xFFFD;
+      bytesPerSequence = 1;
+    } else if (codePoint > 0xFFFF) {
+      codePoint -= 0x10000;
+      res.push(codePoint >>> 10 & 0x3FF | 0xD800);
+      codePoint = 0xDC00 | codePoint & 0x3FF;
+    }
+
+    res.push(codePoint);
+    i += bytesPerSequence;
+  }
+
+  return decodeCodePointsArray(res);
+}
+
+var MAX_ARGUMENTS_LENGTH = 0x1000;
+
+function decodeCodePointsArray(codePoints) {
+  var len = codePoints.length;
+  if (len <= MAX_ARGUMENTS_LENGTH) {
+    return String.fromCharCode.apply(String, codePoints);
+  }
+
+  var res = '';
+  var i = 0;
+  while (i < len) {
+    res += String.fromCharCode.apply(String, codePoints.slice(i, i += MAX_ARGUMENTS_LENGTH));
+  }
+  return res;
+}
+
+function asciiSlice(buf, start, end) {
+  var ret = '';
+  end = Math.min(buf.length, end);
+
+  for (var i = start; i < end; ++i) {
+    ret += String.fromCharCode(buf[i] & 0x7F);
+  }
+  return ret;
+}
+
+function latin1Slice(buf, start, end) {
+  var ret = '';
+  end = Math.min(buf.length, end);
+
+  for (var i = start; i < end; ++i) {
+    ret += String.fromCharCode(buf[i]);
+  }
+  return ret;
+}
+
+function hexSlice(buf, start, end) {
+  var len = buf.length;
+
+  if (!start || start < 0) start = 0;
+  if (!end || end < 0 || end > len) end = len;
+
+  var out = '';
+  for (var i = start; i < end; ++i) {
+    out += toHex(buf[i]);
+  }
+  return out;
+}
+
+function utf16leSlice(buf, start, end) {
+  var bytes = buf.slice(start, end);
+  var res = '';
+  for (var i = 0; i < bytes.length; i += 2) {
+    res += String.fromCharCode(bytes[i] + bytes[i + 1] * 256);
+  }
+  return res;
+}
+
+Buffer.prototype.slice = function slice(start, end) {
+  var len = this.length;
+  start = ~~start;
+  end = end === undefined ? len : ~~end;
+
+  if (start < 0) {
+    start += len;
+    if (start < 0) start = 0;
+  } else if (start > len) {
+    start = len;
+  }
+
+  if (end < 0) {
+    end += len;
+    if (end < 0) end = 0;
+  } else if (end > len) {
+    end = len;
+  }
+
+  if (end < start) end = start;
+
+  var newBuf;
+  if (Buffer.TYPED_ARRAY_SUPPORT) {
+    newBuf = this.subarray(start, end);
+    newBuf.__proto__ = Buffer.prototype;
+  } else {
+    var sliceLen = end - start;
+    newBuf = new Buffer(sliceLen, undefined);
+    for (var i = 0; i < sliceLen; ++i) {
+      newBuf[i] = this[i + start];
+    }
+  }
+
+  return newBuf;
+};
+
+function checkOffset(offset, ext, length) {
+  if (offset % 1 !== 0 || offset < 0) throw new RangeError('offset is not uint');
+  if (offset + ext > length) throw new RangeError('Trying to access beyond buffer length');
+}
+
+Buffer.prototype.readUIntLE = function readUIntLE(offset, byteLength, noAssert) {
+  offset = offset | 0;
+  byteLength = byteLength | 0;
+  if (!noAssert) checkOffset(offset, byteLength, this.length);
+
+  var val = this[offset];
+  var mul = 1;
+  var i = 0;
+  while (++i < byteLength && (mul *= 0x100)) {
+    val += this[offset + i] * mul;
+  }
+
+  return val;
+};
+
+Buffer.prototype.readUIntBE = function readUIntBE(offset, byteLength, noAssert) {
+  offset = offset | 0;
+  byteLength = byteLength | 0;
+  if (!noAssert) {
+    checkOffset(offset, byteLength, this.length);
+  }
+
+  var val = this[offset + --byteLength];
+  var mul = 1;
+  while (byteLength > 0 && (mul *= 0x100)) {
+    val += this[offset + --byteLength] * mul;
+  }
+
+  return val;
+};
+
+Buffer.prototype.readUInt8 = function readUInt8(offset, noAssert) {
+  if (!noAssert) checkOffset(offset, 1, this.length);
+  return this[offset];
+};
+
+Buffer.prototype.readUInt16LE = function readUInt16LE(offset, noAssert) {
+  if (!noAssert) checkOffset(offset, 2, this.length);
+  return this[offset] | this[offset + 1] << 8;
+};
+
+Buffer.prototype.readUInt16BE = function readUInt16BE(offset, noAssert) {
+  if (!noAssert) checkOffset(offset, 2, this.length);
+  return this[offset] << 8 | this[offset + 1];
+};
+
+Buffer.prototype.readUInt32LE = function readUInt32LE(offset, noAssert) {
+  if (!noAssert) checkOffset(offset, 4, this.length);
+
+  return (this[offset] | this[offset + 1] << 8 | this[offset + 2] << 16) + this[offset + 3] * 0x1000000;
+};
+
+Buffer.prototype.readUInt32BE = function readUInt32BE(offset, noAssert) {
+  if (!noAssert) checkOffset(offset, 4, this.length);
+
+  return this[offset] * 0x1000000 + (this[offset + 1] << 16 | this[offset + 2] << 8 | this[offset + 3]);
+};
+
+Buffer.prototype.readIntLE = function readIntLE(offset, byteLength, noAssert) {
+  offset = offset | 0;
+  byteLength = byteLength | 0;
+  if (!noAssert) checkOffset(offset, byteLength, this.length);
+
+  var val = this[offset];
+  var mul = 1;
+  var i = 0;
+  while (++i < byteLength && (mul *= 0x100)) {
+    val += this[offset + i] * mul;
+  }
+  mul *= 0x80;
+
+  if (val >= mul) val -= Math.pow(2, 8 * byteLength);
+
+  return val;
+};
+
+Buffer.prototype.readIntBE = function readIntBE(offset, byteLength, noAssert) {
+  offset = offset | 0;
+  byteLength = byteLength | 0;
+  if (!noAssert) checkOffset(offset, byteLength, this.length);
+
+  var i = byteLength;
+  var mul = 1;
+  var val = this[offset + --i];
+  while (i > 0 && (mul *= 0x100)) {
+    val += this[offset + --i] * mul;
+  }
+  mul *= 0x80;
+
+  if (val >= mul) val -= Math.pow(2, 8 * byteLength);
+
+  return val;
+};
+
+Buffer.prototype.readInt8 = function readInt8(offset, noAssert) {
+  if (!noAssert) checkOffset(offset, 1, this.length);
+  if (!(this[offset] & 0x80)) return this[offset];
+  return (0xff - this[offset] + 1) * -1;
+};
+
+Buffer.prototype.readInt16LE = function readInt16LE(offset, noAssert) {
+  if (!noAssert) checkOffset(offset, 2, this.length);
+  var val = this[offset] | this[offset + 1] << 8;
+  return val & 0x8000 ? val | 0xFFFF0000 : val;
+};
+
+Buffer.prototype.readInt16BE = function readInt16BE(offset, noAssert) {
+  if (!noAssert) checkOffset(offset, 2, this.length);
+  var val = this[offset + 1] | this[offset] << 8;
+  return val & 0x8000 ? val | 0xFFFF0000 : val;
+};
+
+Buffer.prototype.readInt32LE = function readInt32LE(offset, noAssert) {
+  if (!noAssert) checkOffset(offset, 4, this.length);
+
+  return this[offset] | this[offset + 1] << 8 | this[offset + 2] << 16 | this[offset + 3] << 24;
+};
+
+Buffer.prototype.readInt32BE = function readInt32BE(offset, noAssert) {
+  if (!noAssert) checkOffset(offset, 4, this.length);
+
+  return this[offset] << 24 | this[offset + 1] << 16 | this[offset + 2] << 8 | this[offset + 3];
+};
+
+Buffer.prototype.readFloatLE = function readFloatLE(offset, noAssert) {
+  if (!noAssert) checkOffset(offset, 4, this.length);
+  return ieee754.read(this, offset, true, 23, 4);
+};
+
+Buffer.prototype.readFloatBE = function readFloatBE(offset, noAssert) {
+  if (!noAssert) checkOffset(offset, 4, this.length);
+  return ieee754.read(this, offset, false, 23, 4);
+};
+
+Buffer.prototype.readDoubleLE = function readDoubleLE(offset, noAssert) {
+  if (!noAssert) checkOffset(offset, 8, this.length);
+  return ieee754.read(this, offset, true, 52, 8);
+};
+
+Buffer.prototype.readDoubleBE = function readDoubleBE(offset, noAssert) {
+  if (!noAssert) checkOffset(offset, 8, this.length);
+  return ieee754.read(this, offset, false, 52, 8);
+};
+
+function checkInt(buf, value, offset, ext, max, min) {
+  if (!Buffer.isBuffer(buf)) throw new TypeError('"buffer" argument must be a Buffer instance');
+  if (value > max || value < min) throw new RangeError('"value" argument is out of bounds');
+  if (offset + ext > buf.length) throw new RangeError('Index out of range');
+}
+
+Buffer.prototype.writeUIntLE = function writeUIntLE(value, offset, byteLength, noAssert) {
+  value = +value;
+  offset = offset | 0;
+  byteLength = byteLength | 0;
+  if (!noAssert) {
+    var maxBytes = Math.pow(2, 8 * byteLength) - 1;
+    checkInt(this, value, offset, byteLength, maxBytes, 0);
+  }
+
+  var mul = 1;
+  var i = 0;
+  this[offset] = value & 0xFF;
+  while (++i < byteLength && (mul *= 0x100)) {
+    this[offset + i] = value / mul & 0xFF;
+  }
+
+  return offset + byteLength;
+};
+
+Buffer.prototype.writeUIntBE = function writeUIntBE(value, offset, byteLength, noAssert) {
+  value = +value;
+  offset = offset | 0;
+  byteLength = byteLength | 0;
+  if (!noAssert) {
+    var maxBytes = Math.pow(2, 8 * byteLength) - 1;
+    checkInt(this, value, offset, byteLength, maxBytes, 0);
+  }
+
+  var i = byteLength - 1;
+  var mul = 1;
+  this[offset + i] = value & 0xFF;
+  while (--i >= 0 && (mul *= 0x100)) {
+    this[offset + i] = value / mul & 0xFF;
+  }
+
+  return offset + byteLength;
+};
+
+Buffer.prototype.writeUInt8 = function writeUInt8(value, offset, noAssert) {
+  value = +value;
+  offset = offset | 0;
+  if (!noAssert) checkInt(this, value, offset, 1, 0xff, 0);
+  if (!Buffer.TYPED_ARRAY_SUPPORT) value = Math.floor(value);
+  this[offset] = value & 0xff;
+  return offset + 1;
+};
+
+function objectWriteUInt16(buf, value, offset, littleEndian) {
+  if (value < 0) value = 0xffff + value + 1;
+  for (var i = 0, j = Math.min(buf.length - offset, 2); i < j; ++i) {
+    buf[offset + i] = (value & 0xff << 8 * (littleEndian ? i : 1 - i)) >>> (littleEndian ? i : 1 - i) * 8;
+  }
+}
+
+Buffer.prototype.writeUInt16LE = function writeUInt16LE(value, offset, noAssert) {
+  value = +value;
+  offset = offset | 0;
+  if (!noAssert) checkInt(this, value, offset, 2, 0xffff, 0);
+  if (Buffer.TYPED_ARRAY_SUPPORT) {
+    this[offset] = value & 0xff;
+    this[offset + 1] = value >>> 8;
+  } else {
+    objectWriteUInt16(this, value, offset, true);
+  }
+  return offset + 2;
+};
+
+Buffer.prototype.writeUInt16BE = function writeUInt16BE(value, offset, noAssert) {
+  value = +value;
+  offset = offset | 0;
+  if (!noAssert) checkInt(this, value, offset, 2, 0xffff, 0);
+  if (Buffer.TYPED_ARRAY_SUPPORT) {
+    this[offset] = value >>> 8;
+    this[offset + 1] = value & 0xff;
+  } else {
+    objectWriteUInt16(this, value, offset, false);
+  }
+  return offset + 2;
+};
+
+function objectWriteUInt32(buf, value, offset, littleEndian) {
+  if (value < 0) value = 0xffffffff + value + 1;
+  for (var i = 0, j = Math.min(buf.length - offset, 4); i < j; ++i) {
+    buf[offset + i] = value >>> (littleEndian ? i : 3 - i) * 8 & 0xff;
+  }
+}
+
+Buffer.prototype.writeUInt32LE = function writeUInt32LE(value, offset, noAssert) {
+  value = +value;
+  offset = offset | 0;
+  if (!noAssert) checkInt(this, value, offset, 4, 0xffffffff, 0);
+  if (Buffer.TYPED_ARRAY_SUPPORT) {
+    this[offset + 3] = value >>> 24;
+    this[offset + 2] = value >>> 16;
+    this[offset + 1] = value >>> 8;
+    this[offset] = value & 0xff;
+  } else {
+    objectWriteUInt32(this, value, offset, true);
+  }
+  return offset + 4;
+};
+
+Buffer.prototype.writeUInt32BE = function writeUInt32BE(value, offset, noAssert) {
+  value = +value;
+  offset = offset | 0;
+  if (!noAssert) checkInt(this, value, offset, 4, 0xffffffff, 0);
+  if (Buffer.TYPED_ARRAY_SUPPORT) {
+    this[offset] = value >>> 24;
+    this[offset + 1] = value >>> 16;
+    this[offset + 2] = value >>> 8;
+    this[offset + 3] = value & 0xff;
+  } else {
+    objectWriteUInt32(this, value, offset, false);
+  }
+  return offset + 4;
+};
+
+Buffer.prototype.writeIntLE = function writeIntLE(value, offset, byteLength, noAssert) {
+  value = +value;
+  offset = offset | 0;
+  if (!noAssert) {
+    var limit = Math.pow(2, 8 * byteLength - 1);
+
+    checkInt(this, value, offset, byteLength, limit - 1, -limit);
+  }
+
+  var i = 0;
+  var mul = 1;
+  var sub = 0;
+  this[offset] = value & 0xFF;
+  while (++i < byteLength && (mul *= 0x100)) {
+    if (value < 0 && sub === 0 && this[offset + i - 1] !== 0) {
+      sub = 1;
+    }
+    this[offset + i] = (value / mul >> 0) - sub & 0xFF;
+  }
+
+  return offset + byteLength;
+};
+
+Buffer.prototype.writeIntBE = function writeIntBE(value, offset, byteLength, noAssert) {
+  value = +value;
+  offset = offset | 0;
+  if (!noAssert) {
+    var limit = Math.pow(2, 8 * byteLength - 1);
+
+    checkInt(this, value, offset, byteLength, limit - 1, -limit);
+  }
+
+  var i = byteLength - 1;
+  var mul = 1;
+  var sub = 0;
+  this[offset + i] = value & 0xFF;
+  while (--i >= 0 && (mul *= 0x100)) {
+    if (value < 0 && sub === 0 && this[offset + i + 1] !== 0) {
+      sub = 1;
+    }
+    this[offset + i] = (value / mul >> 0) - sub & 0xFF;
+  }
+
+  return offset + byteLength;
+};
+
+Buffer.prototype.writeInt8 = function writeInt8(value, offset, noAssert) {
+  value = +value;
+  offset = offset | 0;
+  if (!noAssert) checkInt(this, value, offset, 1, 0x7f, -0x80);
+  if (!Buffer.TYPED_ARRAY_SUPPORT) value = Math.floor(value);
+  if (value < 0) value = 0xff + value + 1;
+  this[offset] = value & 0xff;
+  return offset + 1;
+};
+
+Buffer.prototype.writeInt16LE = function writeInt16LE(value, offset, noAssert) {
+  value = +value;
+  offset = offset | 0;
+  if (!noAssert) checkInt(this, value, offset, 2, 0x7fff, -0x8000);
+  if (Buffer.TYPED_ARRAY_SUPPORT) {
+    this[offset] = value & 0xff;
+    this[offset + 1] = value >>> 8;
+  } else {
+    objectWriteUInt16(this, value, offset, true);
+  }
+  return offset + 2;
+};
+
+Buffer.prototype.writeInt16BE = function writeInt16BE(value, offset, noAssert) {
+  value = +value;
+  offset = offset | 0;
+  if (!noAssert) checkInt(this, value, offset, 2, 0x7fff, -0x8000);
+  if (Buffer.TYPED_ARRAY_SUPPORT) {
+    this[offset] = value >>> 8;
+    this[offset + 1] = value & 0xff;
+  } else {
+    objectWriteUInt16(this, value, offset, false);
+  }
+  return offset + 2;
+};
+
+Buffer.prototype.writeInt32LE = function writeInt32LE(value, offset, noAssert) {
+  value = +value;
+  offset = offset | 0;
+  if (!noAssert) checkInt(this, value, offset, 4, 0x7fffffff, -0x80000000);
+  if (Buffer.TYPED_ARRAY_SUPPORT) {
+    this[offset] = value & 0xff;
+    this[offset + 1] = value >>> 8;
+    this[offset + 2] = value >>> 16;
+    this[offset + 3] = value >>> 24;
+  } else {
+    objectWriteUInt32(this, value, offset, true);
+  }
+  return offset + 4;
+};
+
+Buffer.prototype.writeInt32BE = function writeInt32BE(value, offset, noAssert) {
+  value = +value;
+  offset = offset | 0;
+  if (!noAssert) checkInt(this, value, offset, 4, 0x7fffffff, -0x80000000);
+  if (value < 0) value = 0xffffffff + value + 1;
+  if (Buffer.TYPED_ARRAY_SUPPORT) {
+    this[offset] = value >>> 24;
+    this[offset + 1] = value >>> 16;
+    this[offset + 2] = value >>> 8;
+    this[offset + 3] = value & 0xff;
+  } else {
+    objectWriteUInt32(this, value, offset, false);
+  }
+  return offset + 4;
+};
+
+function checkIEEE754(buf, value, offset, ext, max, min) {
+  if (offset + ext > buf.length) throw new RangeError('Index out of range');
+  if (offset < 0) throw new RangeError('Index out of range');
+}
+
+function writeFloat(buf, value, offset, littleEndian, noAssert) {
+  if (!noAssert) {
+    checkIEEE754(buf, value, offset, 4, 3.4028234663852886e+38, -3.4028234663852886e+38);
+  }
+  ieee754.write(buf, value, offset, littleEndian, 23, 4);
+  return offset + 4;
+}
+
+Buffer.prototype.writeFloatLE = function writeFloatLE(value, offset, noAssert) {
+  return writeFloat(this, value, offset, true, noAssert);
+};
+
+Buffer.prototype.writeFloatBE = function writeFloatBE(value, offset, noAssert) {
+  return writeFloat(this, value, offset, false, noAssert);
+};
+
+function writeDouble(buf, value, offset, littleEndian, noAssert) {
+  if (!noAssert) {
+    checkIEEE754(buf, value, offset, 8, 1.7976931348623157E+308, -1.7976931348623157E+308);
+  }
+  ieee754.write(buf, value, offset, littleEndian, 52, 8);
+  return offset + 8;
+}
+
+Buffer.prototype.writeDoubleLE = function writeDoubleLE(value, offset, noAssert) {
+  return writeDouble(this, value, offset, true, noAssert);
+};
+
+Buffer.prototype.writeDoubleBE = function writeDoubleBE(value, offset, noAssert) {
+  return writeDouble(this, value, offset, false, noAssert);
+};
+
+Buffer.prototype.copy = function copy(target, targetStart, start, end) {
+  if (!start) start = 0;
+  if (!end && end !== 0) end = this.length;
+  if (targetStart >= target.length) targetStart = target.length;
+  if (!targetStart) targetStart = 0;
+  if (end > 0 && end < start) end = start;
+
+  if (end === start) return 0;
+  if (target.length === 0 || this.length === 0) return 0;
+
+  if (targetStart < 0) {
+    throw new RangeError('targetStart out of bounds');
+  }
+  if (start < 0 || start >= this.length) throw new RangeError('sourceStart out of bounds');
+  if (end < 0) throw new RangeError('sourceEnd out of bounds');
+
+  if (end > this.length) end = this.length;
+  if (target.length - targetStart < end - start) {
+    end = target.length - targetStart + start;
+  }
+
+  var len = end - start;
+  var i;
+
+  if (this === target && start < targetStart && targetStart < end) {
+    for (i = len - 1; i >= 0; --i) {
+      target[i + targetStart] = this[i + start];
+    }
+  } else if (len < 1000 || !Buffer.TYPED_ARRAY_SUPPORT) {
+    for (i = 0; i < len; ++i) {
+      target[i + targetStart] = this[i + start];
+    }
+  } else {
+    Uint8Array.prototype.set.call(target, this.subarray(start, start + len), targetStart);
+  }
+
+  return len;
+};
+
+Buffer.prototype.fill = function fill(val, start, end, encoding) {
+  if (typeof val === 'string') {
+    if (typeof start === 'string') {
+      encoding = start;
+      start = 0;
+      end = this.length;
+    } else if (typeof end === 'string') {
+      encoding = end;
+      end = this.length;
+    }
+    if (val.length === 1) {
+      var code = val.charCodeAt(0);
+      if (code < 256) {
+        val = code;
+      }
+    }
+    if (encoding !== undefined && typeof encoding !== 'string') {
+      throw new TypeError('encoding must be a string');
+    }
+    if (typeof encoding === 'string' && !Buffer.isEncoding(encoding)) {
+      throw new TypeError('Unknown encoding: ' + encoding);
+    }
+  } else if (typeof val === 'number') {
+    val = val & 255;
+  }
+
+  if (start < 0 || this.length < start || this.length < end) {
+    throw new RangeError('Out of range index');
+  }
+
+  if (end <= start) {
+    return this;
+  }
+
+  start = start >>> 0;
+  end = end === undefined ? this.length : end >>> 0;
+
+  if (!val) val = 0;
+
+  var i;
+  if (typeof val === 'number') {
+    for (i = start; i < end; ++i) {
+      this[i] = val;
+    }
+  } else {
+    var bytes = Buffer.isBuffer(val) ? val : utf8ToBytes(new Buffer(val, encoding).toString());
+    var len = bytes.length;
+    for (i = 0; i < end - start; ++i) {
+      this[i + start] = bytes[i % len];
+    }
+  }
+
+  return this;
+};
+
+var INVALID_BASE64_RE = /[^+\/0-9A-Za-z-_]/g;
+
+function base64clean(str) {
+  str = stringtrim(str).replace(INVALID_BASE64_RE, '');
+
+  if (str.length < 2) return '';
+
+  while (str.length % 4 !== 0) {
+    str = str + '=';
+  }
+  return str;
+}
+
+function stringtrim(str) {
+  if (str.trim) return str.trim();
+  return str.replace(/^\s+|\s+$/g, '');
+}
+
+function toHex(n) {
+  if (n < 16) return '0' + n.toString(16);
+  return n.toString(16);
+}
+
+function utf8ToBytes(string, units) {
+  units = units || Infinity;
+  var codePoint;
+  var length = string.length;
+  var leadSurrogate = null;
+  var bytes = [];
+
+  for (var i = 0; i < length; ++i) {
+    codePoint = string.charCodeAt(i);
+
+    if (codePoint > 0xD7FF && codePoint < 0xE000) {
+      if (!leadSurrogate) {
+        if (codePoint > 0xDBFF) {
+          if ((units -= 3) > -1) bytes.push(0xEF, 0xBF, 0xBD);
+          continue;
+        } else if (i + 1 === length) {
+          if ((units -= 3) > -1) bytes.push(0xEF, 0xBF, 0xBD);
+          continue;
+        }
+
+        leadSurrogate = codePoint;
+
+        continue;
+      }
+
+      if (codePoint < 0xDC00) {
+        if ((units -= 3) > -1) bytes.push(0xEF, 0xBF, 0xBD);
+        leadSurrogate = codePoint;
+        continue;
+      }
+
+      codePoint = (leadSurrogate - 0xD800 << 10 | codePoint - 0xDC00) + 0x10000;
+    } else if (leadSurrogate) {
+      if ((units -= 3) > -1) bytes.push(0xEF, 0xBF, 0xBD);
+    }
+
+    leadSurrogate = null;
+
+    if (codePoint < 0x80) {
+      if ((units -= 1) < 0) break;
+      bytes.push(codePoint);
+    } else if (codePoint < 0x800) {
+      if ((units -= 2) < 0) break;
+      bytes.push(codePoint >> 0x6 | 0xC0, codePoint & 0x3F | 0x80);
+    } else if (codePoint < 0x10000) {
+      if ((units -= 3) < 0) break;
+      bytes.push(codePoint >> 0xC | 0xE0, codePoint >> 0x6 & 0x3F | 0x80, codePoint & 0x3F | 0x80);
+    } else if (codePoint < 0x110000) {
+      if ((units -= 4) < 0) break;
+      bytes.push(codePoint >> 0x12 | 0xF0, codePoint >> 0xC & 0x3F | 0x80, codePoint >> 0x6 & 0x3F | 0x80, codePoint & 0x3F | 0x80);
+    } else {
+      throw new Error('Invalid code point');
+    }
+  }
+
+  return bytes;
+}
+
+function asciiToBytes(str) {
+  var byteArray = [];
+  for (var i = 0; i < str.length; ++i) {
+    byteArray.push(str.charCodeAt(i) & 0xFF);
+  }
+  return byteArray;
+}
+
+function utf16leToBytes(str, units) {
+  var c, hi, lo;
+  var byteArray = [];
+  for (var i = 0; i < str.length; ++i) {
+    if ((units -= 2) < 0) break;
+
+    c = str.charCodeAt(i);
+    hi = c >> 8;
+    lo = c % 256;
+    byteArray.push(lo);
+    byteArray.push(hi);
+  }
+
+  return byteArray;
+}
+
+function base64ToBytes(str) {
+  return base64.toByteArray(base64clean(str));
+}
+
+function blitBuffer(src, dst, offset, length) {
+  for (var i = 0; i < length; ++i) {
+    if (i + offset >= dst.length || i >= src.length) break;
+    dst[i + offset] = src[i];
+  }
+  return i;
+}
+
+function isnan(val) {
+  return val !== val;
+}
+}, 333, null, "buffer/index.js");
+__d(/* ieee754/index.js */function(global, require, module, exports) {exports.read = function (buffer, offset, isLE, mLen, nBytes) {
+  var e, m;
+  var eLen = nBytes * 8 - mLen - 1;
+  var eMax = (1 << eLen) - 1;
+  var eBias = eMax >> 1;
+  var nBits = -7;
+  var i = isLE ? nBytes - 1 : 0;
+  var d = isLE ? -1 : 1;
+  var s = buffer[offset + i];
+
+  i += d;
+
+  e = s & (1 << -nBits) - 1;
+  s >>= -nBits;
+  nBits += eLen;
+  for (; nBits > 0; e = e * 256 + buffer[offset + i], i += d, nBits -= 8) {}
+
+  m = e & (1 << -nBits) - 1;
+  e >>= -nBits;
+  nBits += mLen;
+  for (; nBits > 0; m = m * 256 + buffer[offset + i], i += d, nBits -= 8) {}
+
+  if (e === 0) {
+    e = 1 - eBias;
+  } else if (e === eMax) {
+    return m ? NaN : (s ? -1 : 1) * Infinity;
+  } else {
+    m = m + Math.pow(2, mLen);
+    e = e - eBias;
+  }
+  return (s ? -1 : 1) * m * Math.pow(2, e - mLen);
+};
+
+exports.write = function (buffer, value, offset, isLE, mLen, nBytes) {
+  var e, m, c;
+  var eLen = nBytes * 8 - mLen - 1;
+  var eMax = (1 << eLen) - 1;
+  var eBias = eMax >> 1;
+  var rt = mLen === 23 ? Math.pow(2, -24) - Math.pow(2, -77) : 0;
+  var i = isLE ? 0 : nBytes - 1;
+  var d = isLE ? 1 : -1;
+  var s = value < 0 || value === 0 && 1 / value < 0 ? 1 : 0;
+
+  value = Math.abs(value);
+
+  if (isNaN(value) || value === Infinity) {
+    m = isNaN(value) ? 1 : 0;
+    e = eMax;
+  } else {
+    e = Math.floor(Math.log(value) / Math.LN2);
+    if (value * (c = Math.pow(2, -e)) < 1) {
+      e--;
+      c *= 2;
+    }
+    if (e + eBias >= 1) {
+      value += rt / c;
+    } else {
+      value += rt * Math.pow(2, 1 - eBias);
+    }
+    if (value * c >= 2) {
+      e++;
+      c /= 2;
+    }
+
+    if (e + eBias >= eMax) {
+      m = 0;
+      e = eMax;
+    } else if (e + eBias >= 1) {
+      m = (value * c - 1) * Math.pow(2, mLen);
+      e = e + eBias;
+    } else {
+      m = value * Math.pow(2, eBias - 1) * Math.pow(2, mLen);
+      e = 0;
+    }
+  }
+
+  for (; mLen >= 8; buffer[offset + i] = m & 0xff, i += d, m /= 256, mLen -= 8) {}
+
+  e = e << mLen | m;
+  eLen += mLen;
+  for (; eLen > 0; buffer[offset + i] = e & 0xff, i += d, e /= 256, eLen -= 8) {}
+
+  buffer[offset + i - d] |= s * 128;
+};
+}, 334, null, "ieee754/index.js");
+__d(/* isarray/index.js */function(global, require, module, exports) {var toString = {}.toString;
+
+module.exports = Array.isArray || function (arr) {
+  return toString.call(arr) == '[object Array]';
+};
+}, 335, null, "isarray/index.js");
 ;require(49);
 ;require(0);
 //# sourceMappingURL=index.android.map

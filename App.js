@@ -5,69 +5,67 @@ import {
     Text,
     View,
     TouchableHighlight,
-    NativeAppEventEmitter,
-    NativeEventEmitter,
     NativeModules,
     Platform,
     PermissionsAndroid,
     ListView,
     ScrollView,
     FlatList,
-    ToastAndroid
+    ToastAndroid,
+    DeviceEventEmitter
 } from 'react-native';
 import Dimensions from 'Dimensions';
-import BleManager from 'react-native-ble-manager';
 import TimerMixin from 'react-timer-mixin';
 import reactMixin from 'react-mixin';
 
 const window = Dimensions.get('window');
 const ds = new ListView.DataSource({rowHasChanged: (r1, r2) => r1 !== r2});
 
-const BleManagerModule = NativeModules.BleManager;
-const bleManagerEmitter = new NativeEventEmitter(BleManagerModule);
+var noble = require('react-native-ble');
+
+var defaultState = {
+    scanning: false,
+    peripherals: new Map(),
+    notify: false,
+    peripheralUuid: null //connected periferal id
+}
+
+var serviceUUIDs = ['0000ec0000001000800000805f9b34fb']; // default: [] => all
+var characteristicUUIDs = ['ec0e'];
 
 export default class App extends Component {
     constructor() {
         super()
 
-        this.state = {
-            scanning: false,
-            peripherals: new Map(),
-            notify: false
-        }
+        this.state = defaultState
 
-        this.handleDiscoverPeripheral = this.handleDiscoverPeripheral.bind(this);
-        this.handleStopScan = this.handleStopScan.bind(this);
-        this.handleUpdateValueForCharacteristic = this.handleUpdateValueForCharacteristic.bind(this);
-        this.handleDisconnectedPeripheral = this.handleDisconnectedPeripheral.bind(this);
     }
 
-    /*BleManagerDiscoverPeripheral
-    BleManagerDisconnectPeripheral
-    BleManagerConnectPeripheral
-    BleManagerDidUpdateState
-    BleManagerStopScan
-    BleManagerDidUpdateValueForCharacteristic*/
-
     componentDidMount() {
-        BleManager.start({showAlert: false, allowDuplicates: false});
+        this.showMessage("componentDidMount");
+        this.checkPermission();
+        this.setListeners();
+    }
 
-        this.handlerDiscover = bleManagerEmitter.addListener('BleManagerDiscoverPeripheral', this.handleDiscoverPeripheral);
-        this.handlerStop = bleManagerEmitter.addListener('BleManagerStopScan', this.handleStopScan);
-        this.handlerDisconnect = bleManagerEmitter.addListener('BleManagerDisconnectPeripheral', this.handleDisconnectedPeripheral);
-        this.handlerUpdate = bleManagerEmitter.addListener('BleManagerDidUpdateValueForCharacteristic', this.handleUpdateValueForCharacteristic);
+    setListeners() {
+        noble.on('scanStart', this.onScanStarted.bind(this));
+        noble.on('scanStop', this.onScanStopped.bind(this));
+        noble.on('stateChange', this.onStateChanged.bind(this));
+        noble.on('discover', this.onPeriferalDiscovered.bind(this));
+        noble.on('warning', (message)=>{this.showMessage("Warning : "+message)});
+    }
 
-
+    checkPermission() {
         if (Platform.OS === 'android' && Platform.Version >= 23) {
             PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION).then((result) => {
                 if (result) {
-                    console.log("Permission is OK");
+                    this.showMessage("Permission is OK");
                 } else {
                     PermissionsAndroid.requestPermission(PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION).then((result) => {
                         if (result) {
-                            console.log("User accept");
+                            this.showMessage("User accept");
                         } else {
-                            console.log("User refuse");
+                            this.showMessage("User refuse");
                         }
                     });
                 }
@@ -75,194 +73,8 @@ export default class App extends Component {
         }
     }
 
-    componentWillUnmount() {
-        this.handlerDiscover.remove();
-        this.handlerStop.remove();
-        this.handlerDisconnect.remove();
-        this.handlerUpdate.remove();
-    }
-
-
-    /*
-    {
-      "peripheral" : "mac address"
-    }
-     */
-    handleDisconnectedPeripheral(data) {
-        let peripherals = this.state.peripherals;
-        let peripheral = peripherals.get(data.peripheral);//"mac address is passed in 'peripheral' key"
-        if (peripheral) {
-            peripheral.connected = false;
-            peripherals.set(peripheral.id, peripheral);
-            this.setState({peripherals});
-        }
-        this.showMessage('Disconnected from ' + data.peripheral);
-    }
-
-
-    /*
-    {
-      "peripheral" : "mac id",
-      "characteristic" : "characteristic UUID",
-      "service" : "service UUID",
-      "value" : [] //hex value of byte[]
-    }
-     */
-    handleUpdateValueForCharacteristic(data) {
-        console.log('Received data from ' + data.peripheral + ' characteristic ' + data.characteristic, data.value);
-    }
-
-    handleStopScan() {
-        this.showMessage('Scan is stopped');
-        this.setState({scanning: false, notify: false});
-    }
-
-    startScan() {
-        if (!this.state.scanning) {
-            BleManager.scan([], 10, true).then((results) => {
-                this.showMessage('Scanning...');
-                this.setState({scanning: true});
-            });
-        }
-    }
-
-
-    /*
-    {
-      "name" : "device name",
-      "id"  : "mac id",
-      "rssi" : 23,
-      "advertising" : {
-        "CDVType" : "ArrayBuffer",
-        "data" : "Base 64 encoded data",
-        "bytes" : []
-      }
-    }
-    */
-
-    handleDiscoverPeripheral(peripheral) {
-        var peripherals = this.state.peripherals;
-        if (!peripherals.has(peripheral.id)) {
-            console.log('Got ble peripheral', peripheral);
-            peripherals.set(peripheral.id, peripheral);
-            this.setState({peripherals})
-        }
-    }
-
-    test(peripheral) {
-        this.selectedPeriferal = peripheral;
-        if (peripheral) {
-            if (peripheral.connected) {
-                BleManager.disconnect(peripheral.id);
-            } else {
-                BleManager.connect(peripheral.id).then(() => {
-                    let peripherals = this.state.peripherals;
-                    let p = peripherals.get(peripheral.id);
-                    if (p) {
-                        p.connected = true;
-                        peripherals.set(peripheral.id, p);
-                        this.setState({peripherals});
-                    }
-                    this.showMessage('Connected to ' + peripheral.id + ' (' + peripheral.name + ')');
-
-
-                    this.setTimeout(() => {
-
-
-                        BleManager.retrieveServices(peripheral.id).then((peripheralData) => {
-                            console.log('Retrieved peripheral services', peripheralData);
-
-                            /*
-                            Sample Data
-                            {
-                                characteristics: [
-                                  {
-                                    descriptors: [
-                                      Object
-                                    ],
-                                    properties: [
-                                      Object
-                                    ],
-                                    characteristic: '2a37',
-                                    service: '180d'
-                                  }
-                                ],
-                                services: [
-                                  {
-                                    uuid: '1800'
-                                  }
-                                ],
-                                rssi: -45,
-                                advertising: {
-                                  bytes: [],
-                                  data: 'AgoMBglQaUxFAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
-                                  CDVType: 'ArrayBuffer'
-                                },
-                                id: 'B8:27:EB:55:65:13',
-                                name: 'PiLE'
-                              }
-                             */
-
-                            BleManager.readRSSI(peripheral.id).then((rssi) => {
-                                this.showMessage('Retrieved actual RSSI value', rssi);
-                            });
-
-
-                        });
-
-                    }, 900);
-
-
-                }).catch((error) => {
-                    this.showMessage('Connection error', error);
-                });
-            }
-        }
-    }
-
-    showMessage(msg) {
-        console.log(msg);
-        ToastAndroid.showWithGravity(msg, ToastAndroid.SHORT, ToastAndroid.BOTTOM);
-    }
-
-    startRead() {
-        if (this.selectedPeriferal) {
-
-            BleManager.read(this.selectedPeriferal.id, '180D', '2A38')
-                .then((readData) => {
-                    // Success code
-                    console.log('Read: ' + readData);
-                })
-                .catch((error) => {
-                    // Failure code
-                    this.showMessage(error);
-                });
-        } else{
-            this.showMessage("Periferal is not selected.");
-        }
-    }
-
-    startWrite() {
-        if (this.selectedPeriferal) {
-            let messages = [[0, 7, 2, 52, 2, 19, 181], [0, 7, 2, 103, 2, 47, 69], [0, 7, 2, 32, 2, 28, 181], [0, 7, 2, 120, 2, 39, 117]];
-            let message = messages[Math.floor(Math.random() * 3)];
-            //let message = messages[0];
-            console.log(message);
-            BleManager.write(this.selectedPeriferal.id, '180D', '2A39', message,2)
-                .then(() => {
-                    this.showMessage('Write confirmed');
-                })
-                .catch((error) => {
-                    // Failure code
-                    this.showMessage(error);
-                });
-        }else{
-            this.showMessage("Periferal is not selected.");
-        }
-    }
-
     startNotify() {
-        if (this.selectedPeriferal) {
+        /*if (this.selectedPeriferal) {
             if (!this.state.notify) {
                 BleManager.startNotification(this.selectedPeriferal.id, '180D', '2A37').then(() => {
                     this.showMessage('Started notification on ' + this.selectedPeriferal.id);
@@ -282,7 +94,7 @@ export default class App extends Component {
             }
         } else{
             this.showMessage("Periferal is not selected.");
-        }
+        }*/
     }
 
     render() {
@@ -293,7 +105,7 @@ export default class App extends Component {
         return (
             <View style={styles.container}>
                 <TouchableHighlight style={{marginTop: 40, margin: 20, padding: 20, backgroundColor: '#ccc'}}
-                                    onPress={() => this.startScan()}>
+                                    onPress={() => this.startStopScan()}>
                     <Text>Scan Bluetooth ({this.state.scanning ? 'on' : 'off'})</Text>
                 </TouchableHighlight>
 
@@ -325,17 +137,18 @@ export default class App extends Component {
                     }
                     <FlatList
                         data={list}
+                        keyExtractor={(item, index) => index}
                         renderItem={({item}) => {
-                            const color = item.connected ? 'green' : '#fff';
+                            const color = (item.state === 'connected') ? 'green' : '#fff';
                             return (
-                                <TouchableHighlight onPress={() => this.test(item)}>
+                                <TouchableHighlight onPress={() => this.onItemClick(item)}>
                                     <View style={[styles.row, {backgroundColor: color}]}>
                                         <Text style={{
                                             fontSize: 12,
                                             textAlign: 'center',
                                             color: '#333333',
                                             padding: 10
-                                        }}>{item.name}</Text>
+                                        }}>{item.advertisement.localName}</Text>
                                         <Text style={{
                                             fontSize: 8,
                                             textAlign: 'center',
@@ -353,6 +166,184 @@ export default class App extends Component {
     }
 
 
+    /**
+     *
+     * @param peripheral object
+     * {
+          "id": "06:CE:09:41:B3:E7",
+          "address": "06:CE:09:41:B3:E7",
+          "addressType": "unknown",
+          "connectable": true,
+          "advertisement": {
+            "localName": "echo",
+            "txPowerLevel": -2147483648,
+            "manufacturerData": null,
+            "serviceData": [
+
+            ],
+            "serviceUuids": [
+              "0000ec0000001000800000805f9b34fb"
+            ]
+          },
+          "rssi": -34,
+          "state": "disconnected"
+        }
+     */
+
+    onPeriferalDiscovered(peripheral) {
+        this.updatePeripheral(peripheral);
+        this.showMessage('discover: ' + peripheral);
+    }
+
+    componentWillUnmount() {
+        this.showMessage("componentWillUnmount");
+    }
+
+
+    showMessage(msg,showToast = false) {
+        console.log(msg);
+        if(showToast)
+            ToastAndroid.showWithGravity(msg, ToastAndroid.SHORT, ToastAndroid.BOTTOM);
+    }
+
+    disconnectPeripheral(peripheral){
+        this.showMessage("disconnectPeripheral "+ peripheral.id);
+        peripheral.once('disconnect', (error)=> {
+            if(error)
+            {
+                this.showMessage('peripheral.disconnected error: ');
+                this.showMessage(error);
+                return;
+            }
+            this.showMessage('peripheral.disconnected: ' + peripheral.address);
+            this.updatePeripheral(peripheral);
+
+        });
+        peripheral.disconnect();
+    }
+
+    setCurrentPeripheral(peripheralUuid){
+        this.setState({peripheralUuid:peripheralUuid});
+    }
+
+    getCurrentPeripheral(){
+        return this.state.peripherals.get(this.state.peripheralUuid);
+    }
+
+    connectPeripheral(peripheral){
+        this.showMessage("connectPeripheral " + peripheral.id);
+        peripheral.once('connect', (error)=> {
+            if(error)
+            {
+                this.showMessage('peripheral.connect error: ');
+                this.showMessage(error);
+                return;
+            }
+            this.setCurrentPeripheral(peripheral.id);
+            this.showMessage('peripheral.connect: ' + peripheral.address);
+            this.updatePeripheral(peripheral);
+            peripheral.discoverServices();
+            //this.discoverAllServiceAndCharacteristics(peripheral);
+        });
+        peripheral.once('servicesDiscover', (services)=> {
+            this.onServicesDiscovered(peripheral,services);
+        });
+        peripheral.once('rssiUpdate', function (rssi) {
+            this.showMessage('--- rssiUpdate ' + rssi);
+        });
+        peripheral.connect();
+    }
+
+    discoverAllServiceAndCharacteristics(peripheral){
+        peripheral.discoverAllServicesAndCharacteristics((error, services, characteristics)=>{
+            this.showMessage(services.length + ' services discovered!!!! for '+ peripheral.id);
+            this.showMessage(characteristics.length + ' characteristics discovered!!!! for '+ peripheral.id);
+        });
+    }
+
+    onServicesDiscovered(peripheral,services){
+        this.showMessage(services.length + ' services discovered!!!! for '+ peripheral.id);
+        let serviceUUIDs = ['0000ec0000001000800000805f9b34fb'];
+        //let service = this.findService(peripheral,serviceUUIDs[0]);
+        let service = services[2];
+        if(service){
+            this.showMessage("Found proper service");
+            service.discoverCharacteristics([], (error, characteristics)=> {
+                this.showMessage('  ---- number of characteristics = ' + characteristics.length + ',   ' + service.uuid);
+                characteristics.forEach((c)=> {
+                    var uuid = c.uuid;
+                    if(uuid == characteristicUUIDs[0]) // use indexof != -1
+                    {
+                        this.showMessage('     --- Matched our desired uuid!\n');
+                        //this.doSomeTest(c);
+                    }
+                });
+
+            });
+
+            /*service.once('characteristicsDiscover', (characteristics)=>{
+                this.showMessage('  ---- number of characteristics = ' + characteristics.length + ',   ' + peripheral.address);
+            });
+            service.discoverCharacteristics();*/
+        }
+
+    }
+
+    findService(peripheral,serviceUUID){
+        let service;
+        for(let i=0;i<peripheral.services.length;i++){
+            let srv = peripheral.services[i];
+            let uuid = srv.uuid;
+            this.showMessage("Checking service uuid "+uuid);
+            if(uuid === serviceUUID){
+                service = srv;
+                break;
+            }
+        }
+        return service;
+    }
+
+    updatePeripheral(peripheral){
+        this.showMessage("updatePeripheral");
+        let peripherals = this.state.peripherals;
+        peripherals.set(peripheral.id,peripheral);
+        this.setState(peripherals);
+    }
+
+    onItemClick(peripheral) {
+        if(peripheral){
+            if(peripheral.state === 'connected'){
+                this.disconnectPeripheral(peripheral);
+            } else {
+                this.connectPeripheral(peripheral);
+            }
+        }
+    }
+
+    startStopScan() {
+        if (!this.state.scanning) {
+            noble.startScanning();
+        } else {
+            noble.stopScanning();
+        }
+    }
+
+    onScanStarted() {
+        this.showMessage("onScanStarted");
+        this.state.peripherals.clear();
+        this.setState({scanning: true})
+        setTimeout(this.startStopScan.bind(this), 2000);
+    }
+
+    onScanStopped() {
+        this.showMessage("onScanStopped");
+        this.setState({scanning: false})
+    }
+
+    onStateChanged(state) {
+        // 'unknown', 'resetting', 'unsupported', 'unauthorized', 'poweredOff', 'poweredOn'
+        this.showMessage("onStateChanged => "+state);
+    }
 }
 reactMixin(App.prototype, TimerMixin);
 
