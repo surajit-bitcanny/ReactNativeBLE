@@ -18,6 +18,8 @@ import Dimensions from 'Dimensions';
 import TimerMixin from 'react-timer-mixin';
 import reactMixin from 'react-mixin';
 
+global.Buffer = require('buffer').Buffer;
+
 const window = Dimensions.get('window');
 const ds = new ListView.DataSource({rowHasChanged: (r1, r2) => r1 !== r2});
 
@@ -30,8 +32,18 @@ var defaultState = {
     peripheralUuid: null //connected periferal id
 }
 
-var serviceUUIDs = ['0000ec0000001000800000805f9b34fb']; // default: [] => all
+var serviceUUIDs = ['ec00']; // default: [] => all
 var characteristicUUIDs = ['ec0e'];
+//var UUID_BASE = "0000XXXX-0000-1000-8000-00805f9b34fb";
+var UUID_BASE = "0000XXXX00001000800000805f9b34fb";
+
+var getProperUUID = function (uuid) {
+    var myUUID = uuid;
+    if(myUUID.length == 4){
+        myUUID = UUID_BASE.replace("XXXX", uuid);
+    }
+    return myUUID;
+}
 
 export default class App extends Component {
     constructor() {
@@ -53,6 +65,7 @@ export default class App extends Component {
         noble.on('stateChange', this.onStateChanged.bind(this));
         noble.on('discover', this.onPeriferalDiscovered.bind(this));
         noble.on('warning', (message)=>{this.showMessage("Warning : "+message)});
+        noble.on('characteristicsDiscover', (data)=>{this.showMessage(data)});
     }
 
     checkPermission() {
@@ -112,12 +125,12 @@ export default class App extends Component {
                 <View style={{flexDirection: 'row'}}>
 
                     <TouchableHighlight style={{marginTop: 40, margin: 20, padding: 20, backgroundColor: '#ccc'}}
-                                        onPress={() => this.startRead()}>
+                                        onPress={() => this.readData()}>
                         <Text>Read</Text>
                     </TouchableHighlight>
 
                     <TouchableHighlight style={{marginTop: 40, margin: 20, padding: 20, backgroundColor: '#ccc'}}
-                                        onPress={() => this.startWrite()}>
+                                        onPress={() => this.writeData()}>
                         <Text>Write</Text>
                     </TouchableHighlight>
 
@@ -232,6 +245,7 @@ export default class App extends Component {
 
     connectPeripheral(peripheral){
         this.showMessage("connectPeripheral " + peripheral.id);
+
         peripheral.once('connect', (error)=> {
             if(error)
             {
@@ -264,29 +278,71 @@ export default class App extends Component {
     onServicesDiscovered(peripheral,services){
         this.showMessage(services.length + ' services discovered!!!! for '+ peripheral.id);
         let serviceUUIDs = ['0000ec0000001000800000805f9b34fb'];
-        //let service = this.findService(peripheral,serviceUUIDs[0]);
-        let service = services[2];
+        let service = this.findService(peripheral,getProperUUID('ec00'));
         if(service){
-            this.showMessage("Found proper service");
-            service.discoverCharacteristics([], (error, characteristics)=> {
-                this.showMessage('  ---- number of characteristics = ' + characteristics.length + ',   ' + service.uuid);
-                characteristics.forEach((c)=> {
-                    var uuid = c.uuid;
-                    if(uuid == characteristicUUIDs[0]) // use indexof != -1
-                    {
-                        this.showMessage('     --- Matched our desired uuid!\n');
-                        //this.doSomeTest(c);
-                    }
-                });
+            this.showMessage("Found proper serviceeeee");
 
+            service.discoverCharacteristics([getProperUUID('ec0e')], (error, characteristics)=> {
+                if(error)
+                {
+                    this.showMessage('service.discoverCharacteristics error: ');
+                    this.showMessage(error);
+                    return;
+                }
+                this.onCharacteristicsDiscovered(service,characteristics);
             });
 
             /*service.once('characteristicsDiscover', (characteristics)=>{
-                this.showMessage('  ---- number of characteristics = ' + characteristics.length + ',   ' + peripheral.address);
+                this.showMessage('  ---- number of characteristics = ' + characteristics.length + ',   ' + peripheral.address,true);
             });
-            service.discoverCharacteristics();*/
+            service.discoverCharacteristics([getProperUUID('ec0e')]);*/
         }
 
+    }
+
+    onCharacteristicsDiscovered(service,characteristics){
+        console.log(characteristics.length + ' characteristics found for ' + service.uuid);
+        //let peripheral = this.getCurrentPeripheral();
+        for (var i in characteristics) {
+            console.log('  ' + i + ' uuid: ' + characteristics[i].uuid);
+        }
+    }
+
+    readData(){
+
+    }
+
+    writeData(){
+        let peripheral = this.getCurrentPeripheral();
+        let characteristics = this.findCharacteristics(peripheral,getProperUUID('ec00'),getProperUUID('ec0e'));
+        if(characteristics){
+            this.showMessage("Found characteristics.......................");
+
+            new Buffer("Hello");
+
+            characteristics.write(new Buffer("Hello"),true,(error)=>{
+                if(error){
+                    this.showMessage("Write error");
+                    this.showMessage(error);
+                } else{
+                    this.showMessage("Write success");
+                }
+            });
+        }
+    }
+
+    findCharacteristics(peripheral,serviceUUID,characteristicsUUID){
+        let service = this.findService(peripheral,serviceUUID);
+        let characteristics;
+        for(let i=0;i<service.characteristics.length;i++){
+            let char = service.characteristics[i];
+            this.showMessage("Checking characteristics uuid "+char.uuid);
+            if(char.uuid === characteristicsUUID){
+                characteristics = char;
+                break;
+            }
+        }
+        return characteristics;
     }
 
     findService(peripheral,serviceUUID){
