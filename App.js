@@ -66,6 +66,9 @@ export default class App extends Component {
         noble.on('discover', this.onPeriferalDiscovered.bind(this));
         noble.on('warning', (message)=>{this.showMessage("Warning : "+message)});
         noble.on('characteristicsDiscover', (data)=>{this.showMessage(data)});
+
+        noble.on('connect', ()=>{this.showMessage("Connected............ : ")});
+        noble.on('disconnect', ()=>{this.showMessage("Disconnected............. : ")});
     }
 
     checkPermission() {
@@ -84,30 +87,6 @@ export default class App extends Component {
                 }
             });
         }
-    }
-
-    startNotify() {
-        /*if (this.selectedPeriferal) {
-            if (!this.state.notify) {
-                BleManager.startNotification(this.selectedPeriferal.id, '180D', '2A37').then(() => {
-                    this.showMessage('Started notification on ' + this.selectedPeriferal.id);
-                    this.setState({notify: true})
-                }).catch((error) => {
-                    this.showMessage('Notification error', error);
-                    this.setState({notify: false})
-                });
-            } else {
-                BleManager.stopNotification(this.selectedPeriferal.id, '180D', '2A37').then(() => {
-                    this.showMessage('Notification turned off ' + this.selectedPeriferal.id);
-                    this.setState({notify: false})
-                }).catch((error) => {
-                    this.showMessage('Notification error', error);
-                    this.setState({notify: false})
-                });
-            }
-        } else{
-            this.showMessage("Periferal is not selected.");
-        }*/
     }
 
     render() {
@@ -308,25 +287,140 @@ export default class App extends Component {
         }
     }
 
-    readData(){
+    getCharacteristics(){
+        let peripheral = this.getCurrentPeripheral();
+        let characteristics = this.findCharacteristics(peripheral,getProperUUID('ec00'),getProperUUID('ec0e'));
+        if(characteristics) {
+            this.showMessage("Found characteristics....." + characteristics);
+        }else{
+            this.showMessage("Characteristics ec0e not found",true);
+        }
+        return characteristics;
+    }
 
+    startNotify() {
+        let characteristics = this.getCharacteristics();
+        if(characteristics){
+            let notify = this.state.notify;
+            if(notify){
+                characteristics.unsubscribe((error)=>{
+                    if(error){
+                        this.showMessage("Notification unsubscribe error");
+                        this.showMessage(error,true);
+                        return;
+                    }
+                    characteristics.removeListener('data',this.notificationCallback);
+                    this.showMessage("Notification unsubscribed");
+                    this.setState({notify : false});
+                });
+            } else{
+                this.notificationCallback = this.onNotificationReceived.bind(this);
+                characteristics.on('data',this.notificationCallback);
+                characteristics.subscribe((error)=>{
+                    if(error){
+                        this.showMessage("Notification subscribe error");
+                        this.showMessage(error,true);
+                        return;
+                    }
+                    this.showMessage("Notification subscribed");
+                    this.setState({notify : true});
+                });
+            }
+        }
+    }
+
+    onNotificationReceived(data, isNotification){
+        if(isNotification){
+            this.showMessage("New notificationn received----------------------");
+            this.showMessage(data,true);
+        }
+    }
+
+    readData(){
+        let characteristics = this.getCharacteristics();
+        if(characteristics){
+            characteristics.read((error,data)=>{
+                if(error){
+                    this.showMessage("Read error---------------------");
+                    this.showMessage(error,true);
+                    return;
+                }
+
+                this.showMessage("Read success-----------------------");
+                this.showMessage(data.toString("ascii"));
+            });
+        }
     }
 
     writeData(){
-        let peripheral = this.getCurrentPeripheral();
-        let characteristics = this.findCharacteristics(peripheral,getProperUUID('ec00'),getProperUUID('ec0e'));
+        let characteristics = this.getCharacteristics();
         if(characteristics){
-            this.showMessage("Found characteristics.......................");
+            let data = "{\n" +
+                "  \"state\": {\n" +
+                "    \"desired\": {\n" +
+                "      \"settings\": {\n" +
+                "        \"type\": \"hub\",\n" +
+                "        \"hub_id\": \"7330620e-422b-49ac-90ac-2098349e74c7\",\n" +
+                "        \"wifi_ssid\": \"\",\n" +
+                "        \"wifi_password\": \"\",\n" +
+                "        \"apn\": \"\",\n" +
+                "        \"rently_batch_code_duration\": 1440,\n" +
+                "        \"time_zone\": \"America/New_York\",\n" +
+                "        \"sensors\": \"enable\",\n" +
+                "        \"devices\": [],\n" +
+                "        \"schedule\": \"4e4585c0-cffb-48c6-a18f-c9d17f6f1a50|2017-07-20T10:48:47Z\",\n" +
+                "        \"monitoring\": \"arm_out\",\n" +
+                "        \"max_ui_slots\": 71,\n" +
+                "        \"latitude\": \"22.54144273140893\",\n" +
+                "        \"longitude\": \"88.34919823037352\",\n" +
+                "        \"schedules\": {}\n" +
+                "      },\n" +
+                "      \"thing_name\": \"30012\",\n" +
+                "      \"commands\": {}\n" +
+                "    },\n" +
+                "    \"reported\": {\n" +
+                "      \"thing_name\": \"30012\",\n" +
+                "      \"settings\": {\n" +
+                "        \"type\": \"hub\",\n" +
+                "        \"hub_id\": \"7330620e-422b-49ac-90ac-2098349e74c7\",\n" +
+                "        \"wifi_ssid\": \"\",\n" +
+                "        \"wifi_password\": \"\",\n" +
+                "        \"apn\": \"\",\n" +
+                "        \"rently_batch_code_duration\": 1440,\n" +
+                "        \"time_zone\": \"America/New_York\",\n" +
+                "        \"sensors\": \"enable\",\n" +
+                "        \"devices\": [],\n" +
+                "        \"schedule\": \"4e4585c0-cffb-48c6-a18f-c9d17f6f1a50|2017-07-20T10:48:47Z\",\n" +
+                "        \"monitoring\": \"arm_out\",\n" +
+                "        \"max_ui_slots\": 71,\n" +
+                "        \"latitude\": \"22.54144273140893\",\n" +
+                "        \"longitude\": \"88.34919823037352\",\n" +
+                "        \"schedules\": {}\n" +
+                "      },\n" +
+                "      \"commands\": {},\n" +
+                "      \"notification\": {},\n" +
+                "      \"status\": {\n" +
+                "        \"heartBeat\": \"2017-08-02T07:52:19.973Z\",\n" +
+                "        \"lastRefreshDate\": \"2017-07-28T05:13:48.270Z\",\n" +
+                "        \"fwVer\": \"1.2.3.10\",\n" +
+                "        \"network_type\": \"ethernet\",\n" +
+                "        \"battery\": \"low\"\n" +
+                "      }\n" +
+                "    }\n" +
+                "  },\n" +
+                "  \"version\": 73112,\n" +
+                "  \"timestamp\": 1501661553\n" +
+                "}";
 
-            new Buffer("Hello");
-
-            characteristics.write(new Buffer("Hello"),true,(error)=>{
+            characteristics.write(Buffer.from(data),false,(error)=>{
                 if(error){
-                    this.showMessage("Write error");
-                    this.showMessage(error);
-                } else{
-                    this.showMessage("Write success");
+                    this.showMessage("Write error--------------------");
+                    this.showMessage(error,true);
+                    return;
                 }
+
+                this.showMessage("Write success-----------------------");
+                this.showMessage(data,'ascii');
             });
         }
     }
@@ -336,7 +430,7 @@ export default class App extends Component {
         let characteristics;
         for(let i=0;i<service.characteristics.length;i++){
             let char = service.characteristics[i];
-            this.showMessage("Checking characteristics uuid "+char.uuid);
+            //this.showMessage("Checking characteristics uuid "+char.uuid);
             if(char.uuid === characteristicsUUID){
                 characteristics = char;
                 break;
@@ -350,7 +444,7 @@ export default class App extends Component {
         for(let i=0;i<peripheral.services.length;i++){
             let srv = peripheral.services[i];
             let uuid = srv.uuid;
-            this.showMessage("Checking service uuid "+uuid);
+            //this.showMessage("Checking service uuid "+uuid);
             if(uuid === serviceUUID){
                 service = srv;
                 break;
