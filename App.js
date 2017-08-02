@@ -256,12 +256,11 @@ export default class App extends Component {
 
     onServicesDiscovered(peripheral,services){
         this.showMessage(services.length + ' services discovered!!!! for '+ peripheral.id);
-        let serviceUUIDs = ['0000ec0000001000800000805f9b34fb'];
-        let service = this.findService(peripheral,getProperUUID('ec00'));
+        let service = this.findService(peripheral,getProperUUID(serviceUUIDs[0]));
         if(service){
             this.showMessage("Found proper serviceeeee");
 
-            service.discoverCharacteristics([getProperUUID('ec0e')], (error, characteristics)=> {
+            service.discoverCharacteristics([getProperUUID(characteristicUUIDs[0])], (error, characteristics)=> {
                 if(error)
                 {
                     this.showMessage('service.discoverCharacteristics error: ');
@@ -289,11 +288,11 @@ export default class App extends Component {
 
     getCharacteristics(){
         let peripheral = this.getCurrentPeripheral();
-        let characteristics = this.findCharacteristics(peripheral,getProperUUID('ec00'),getProperUUID('ec0e'));
+        let characteristics = this.findCharacteristics(peripheral,getProperUUID(serviceUUIDs[0]),getProperUUID(characteristicUUIDs[0]));
         if(characteristics) {
             this.showMessage("Found characteristics....." + characteristics);
         }else{
-            this.showMessage("Characteristics ec0e not found",true);
+            this.showMessage("Characteristics "+characteristicUUIDs[0]+" not found",true);
         }
         return characteristics;
     }
@@ -332,7 +331,7 @@ export default class App extends Component {
     onNotificationReceived(data, isNotification){
         if(isNotification){
             this.showMessage("New notificationn received----------------------");
-            this.showMessage(data,true);
+            this.showMessage(data.toString("ascii"),true);
         }
     }
 
@@ -412,7 +411,7 @@ export default class App extends Component {
                 "  \"timestamp\": 1501661553\n" +
                 "}";
 
-            characteristics.write(Buffer.from(data),false,(error)=>{
+            characteristics.write(Buffer.from("Hiiiiiii"),false,(error)=>{
                 if(error){
                     this.showMessage("Write error--------------------");
                     this.showMessage(error,true);
@@ -420,7 +419,6 @@ export default class App extends Component {
                 }
 
                 this.showMessage("Write success-----------------------");
-                this.showMessage(data,'ascii');
             });
         }
     }
