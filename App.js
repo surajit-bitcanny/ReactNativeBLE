@@ -351,6 +351,27 @@ export default class App extends Component {
         }
     }
 
+    prepareData(str,maxCount) {
+        var len = str.length;
+        console.log("Input Length ="+len);
+        var startIndex = 0;
+        var endIndex = maxCount;
+        var arr = ['STRT'];
+        while(startIndex<len){
+            if(endIndex>len){
+                endIndex = len;
+            }
+            console.log("startIndex="+startIndex+"     endIndex="+endIndex);
+            arr.push(str.substring(startIndex,endIndex));
+            startIndex+=maxCount;
+            endIndex+=maxCount;
+        }
+        arr.push('STOP');
+        console.log(arr.length);
+        console.log(arr);
+        return arr;
+    }
+
     writeData(){
         let characteristics = this.getCharacteristics();
         if(characteristics){
@@ -411,16 +432,29 @@ export default class App extends Component {
                 "  \"timestamp\": 1501661553\n" +
                 "}";
 
-            characteristics.write(Buffer.from("Hiiiiiii"),false,(error)=>{
-                if(error){
-                    this.showMessage("Write error--------------------");
-                    this.showMessage(error,true);
-                    return;
-                }
 
-                this.showMessage("Write success-----------------------");
-            });
+            this.dataChunk = this.prepareData(data,20);
+            this.writeIndex = 0;
+
+            this.writeDataChunk(characteristics);
         }
+    }
+
+    writeDataChunk(characteristics){
+        let data = this.dataChunk[this.writeIndex++];
+        characteristics.write(Buffer.from(data),false,(error)=>{
+            if(error){
+                this.showMessage("Write error--------------------");
+                this.showMessage(error,true);
+                return;
+            }
+
+            this.showMessage("Write success-----------------------");
+            this.showMessage(data);
+            if(this.writeIndex<this.dataChunk.length){
+                this.writeDataChunk(characteristics);
+            }
+        });
     }
 
     findCharacteristics(peripheral,serviceUUID,characteristicsUUID){
