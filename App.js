@@ -24,7 +24,7 @@ const window = Dimensions.get('window');
 const ds = new ListView.DataSource({rowHasChanged: (r1, r2) => r1 !== r2});
 
 var noble = require('react-native-ble');
-var maxPacketSize = 20;
+var maxPacketSize = 500;
 
 var defaultState = {
     scanning: false,
@@ -98,29 +98,34 @@ export default class App extends Component {
 
         return (
             <View style={styles.container}>
-                <TouchableHighlight style={{marginTop: 40, margin: 20, padding: 20, backgroundColor: '#ccc'}}
+                <TouchableHighlight style={{ margin: 20, padding: 20, backgroundColor: '#ccc'}}
                                     onPress={() => this.startStopScan()}>
                     <Text>Scan Bluetooth ({this.state.scanning ? 'on' : 'off'})</Text>
                 </TouchableHighlight>
 
                 <View style={{flexDirection: 'row'}}>
 
-                    <TouchableHighlight style={{marginTop: 40, margin: 20, padding: 20, backgroundColor: '#ccc'}}
+                    <TouchableHighlight style={{ margin: 20, padding: 20, backgroundColor: '#ccc'}}
                                         onPress={() => this.readData()}>
                         <Text>Read</Text>
                     </TouchableHighlight>
 
-                    <TouchableHighlight style={{marginTop: 40, margin: 20, padding: 20, backgroundColor: '#ccc'}}
-                                        onPress={() => this.writeData()}>
-                        <Text>Write</Text>
+                    <TouchableHighlight style={{ margin: 20, padding: 20, backgroundColor: '#ccc'}}
+                                        onPress={() => this.writeData1()}>
+                        <Text>Write1</Text>
                     </TouchableHighlight>
 
-                    <TouchableHighlight style={{marginTop: 40, margin: 20, padding: 20, backgroundColor: '#ccc'}}
+                    <TouchableHighlight style={{ margin: 20, padding: 20, backgroundColor: '#ccc'}}
                                         onPress={() => this.startNotify()}>
                         <Text>Notify ({this.state.notify ? 'on' : 'off'})</Text>
                     </TouchableHighlight>
 
                 </View>
+
+                <TouchableHighlight style={{padding: 20, backgroundColor: '#ccc'}}
+                                    onPress={() => this.writeData2()}>
+                    <Text>Write Long Text</Text>
+                </TouchableHighlight>
 
 
                 <ScrollView style={styles.scroll}>
@@ -429,10 +434,10 @@ export default class App extends Component {
         return arr;
     }
 
-    writeData(){
+    writeData2(){
         let characteristics = this.getCharacteristics();
         if(characteristics){
-            /*let data = "{\n" +
+            let data = "{\n" +
                 "  \"state\": {\n" +
                 "    \"desired\": {\n" +
                 "      \"settings\": {\n" +
@@ -487,7 +492,19 @@ export default class App extends Component {
                 "  },\n" +
                 "  \"version\": 73112,\n" +
                 "  \"timestamp\": 1501661553\n" +
-                "}";*/
+                "}";
+
+
+            this.dataChunk = this.prepareData(data,maxPacketSize);
+            this.writeIndex = 0;
+            this.showMessage("Writing started---------------------------",true);
+            this.writeDataChunk(characteristics);
+        }
+    }
+
+    writeData1(){
+        let characteristics = this.getCharacteristics();
+        if(characteristics){
 
             let data = "{\n" +
                 "\t\"state\": {\n" +
@@ -522,8 +539,8 @@ export default class App extends Component {
                 return;
             }
 
-            this.showMessage("Write success-----------------------"+data.length+"bytes");
-            this.showMessage(data);
+            //this.showMessage("Write success-----------------------"+data.length+"bytes");
+            //this.showMessage(data);
             if(this.writeIndex<this.dataChunk.length){
                 this.writeDataChunk(characteristics);
             } else{
