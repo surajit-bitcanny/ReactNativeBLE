@@ -30,7 +30,8 @@ var defaultState = {
     scanning: false,
     peripherals: new Map(),
     notify: false,
-    peripheralUuid: null //connected periferal id
+    peripheralUuid: null, //connected periferal id
+    outputText:""
 }
 
 var serviceUUIDs = ['ec00']; // default: [] => all
@@ -153,6 +154,9 @@ export default class App extends Component {
                             );
                         }}
                     />
+                    <Text>
+                        {this.state.outputText}
+                    </Text>
                 </ScrollView>
             </View>
         );
@@ -314,13 +318,15 @@ export default class App extends Component {
 
     getCharacteristics(){
         let peripheral = this.getCurrentPeripheral();
-        let characteristics = this.findCharacteristics(peripheral,getProperUUID(serviceUUIDs[0]),getProperUUID(characteristicUUIDs[0]));
-        if(characteristics) {
-            this.showMessage("Found characteristics....." + characteristics);
-        }else{
-            this.showMessage("Characteristics "+characteristicUUIDs[0]+" not found",true);
+        if(peripheral) {
+            let characteristics = this.findCharacteristics(peripheral, getProperUUID(serviceUUIDs[0]), getProperUUID(characteristicUUIDs[0]));
+            if (characteristics) {
+                this.showMessage("Found characteristics....." + characteristics);
+            } else {
+                this.showMessage("Characteristics " + characteristicUUIDs[0] + " not found", true);
+            }
+            return characteristics;
         }
-        return characteristics;
     }
 
     startNotify() {
@@ -363,22 +369,12 @@ export default class App extends Component {
 
     readData(){
         let characteristics = this.getCharacteristics();
-        /*if(characteristics){
-            characteristics.read((error,data)=>{
-                if(error){
-                    this.showMessage("Read error---------------------");
-                    this.showMessage(error,true);
-                    return;
-                }
-
-                this.showMessage("Read success-----------------------");
-                this.showMessage(data.toString("ascii"));
-            });
-        }*/
-        this.showMessage("Reading started---------------------------");
-        this.readIndex = 0;
-        this.readBuffer = new Buffer(1024*8).fill(0);
-        this.readDataChunk(characteristics);
+        if(characteristics) {
+            this.showMessage("Reading started---------------------------",true);
+            this.readIndex = 0;
+            this.readBuffer = new Buffer(1024 * 8).fill(0);
+            this.readDataChunk(characteristics);
+        }
     }
 
     readDataChunk(characteristics){
@@ -402,8 +398,10 @@ export default class App extends Component {
             //this.showMessage(str);
             let flag = data[0];
             if(flag === 48){//ascii code of '0'
-                this.showMessage("Reading completed---------------------------");
-                this.showMessage(this.readBuffer.toString('ascii',0,this.readIndex));
+                this.showMessage("Reading completed---------------------------",true);
+                let outputText = this.readBuffer.toString('ascii',0,this.readIndex);
+                this.showMessage(outputText);
+                this.setState({outputText:outputText});
             } else{
                 this.readDataChunk(characteristics);
             }
@@ -510,7 +508,7 @@ export default class App extends Component {
 
             this.dataChunk = this.prepareData(data,maxPacketSize);
             this.writeIndex = 0;
-
+            this.showMessage("Writing started---------------------------",true);
             this.writeDataChunk(characteristics);
         }
     }
@@ -528,6 +526,8 @@ export default class App extends Component {
             this.showMessage(data);
             if(this.writeIndex<this.dataChunk.length){
                 this.writeDataChunk(characteristics);
+            } else{
+                this.showMessage("Write completed---------------",true);
             }
         });
     }
