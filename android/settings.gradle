@@ -1,6 +1,7 @@
 rootProject.name = 'ble'
 
 include ':react-native-ble'
-project(':react-native-ble').projectDir = new File(rootProject.projectDir, '../node_modules/react-native-ble/android')
+//project(':react-native-ble').projectDir = new File(rootProject.projectDir, '../node_modules/react-native-ble/android')
+project(':react-native-ble').projectDir = new File(rootProject.projectDir, '../../react-native-ble/android')
 
 include ':app'

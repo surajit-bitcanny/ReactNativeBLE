@@ -24,6 +24,7 @@ const window = Dimensions.get('window');
 const ds = new ListView.DataSource({rowHasChanged: (r1, r2) => r1 !== r2});
 
 var noble = require('react-native-ble');
+var maxPacketSize = 20;
 
 var defaultState = {
     scanning: false,
@@ -281,8 +282,33 @@ export default class App extends Component {
     onCharacteristicsDiscovered(service,characteristics){
         console.log(characteristics.length + ' characteristics found for ' + service.uuid);
         //let peripheral = this.getCurrentPeripheral();
-        for (var i in characteristics) {
+        for (let i in characteristics) {
             console.log('  ' + i + ' uuid: ' + characteristics[i].uuid);
+            characteristics[i].discoverDescriptors((error,descriptors)=>{
+                if(error){
+                    console.log("Error on reading descriptor");
+                    return;
+                }
+                this.onDescriptorDiscovered(characteristics[i],descriptors);
+            });
+        }
+
+    }
+
+    /**
+     *
+     * @param characteristics Object
+     * @param descriptors Array
+     */
+    onDescriptorDiscovered(characteristics,descriptors){
+        console.log(descriptors.length + ' descriptors found for ' + characteristics.uuid);
+        for (let i in descriptors) {
+            console.log('  ' + i + ' uuid: ' + descriptors[i].uuid);
+
+            /*descriptors[i].readValue((error, data)=>{
+                console.log('Error' + error);
+                console.log('Descriptor' + data);
+            });*/
         }
     }
 
@@ -337,7 +363,7 @@ export default class App extends Component {
 
     readData(){
         let characteristics = this.getCharacteristics();
-        if(characteristics){
+        /*if(characteristics){
             characteristics.read((error,data)=>{
                 if(error){
                     this.showMessage("Read error---------------------");
@@ -348,7 +374,40 @@ export default class App extends Component {
                 this.showMessage("Read success-----------------------");
                 this.showMessage(data.toString("ascii"));
             });
+        }*/
+        this.showMessage("Reading started---------------------------");
+        this.readIndex = 0;
+        this.readBuffer = new Buffer(1024*8).fill(0);
+        this.readDataChunk(characteristics);
+    }
+
+    readDataChunk(characteristics){
+        if(!characteristics){
+            return;
         }
+        characteristics.read((error,data)=>{
+            if(error){
+                this.showMessage("Read error---------------------");
+                this.showMessage(error,true);
+                return;
+            }
+
+            //let str = data.toString('ascii');
+            //this.readBuffer.write(str,this.readIndex);
+            //let actualData = data.slice(1);
+            //this.readBuffer.copy(actualData,this.readIndex);
+            data.copy(this.readBuffer,this.readIndex,1);
+            this.readIndex+=data.length-1;
+            this.showMessage("Read success----------------------- "+data.length+" bytes");
+            //this.showMessage(str);
+            let flag = data[0];
+            if(flag === 48){//ascii code of '0'
+                this.showMessage("Reading completed---------------------------");
+                this.showMessage(this.readBuffer.toString('ascii',0,this.readIndex));
+            } else{
+                this.readDataChunk(characteristics);
+            }
+        });
     }
 
     prepareData(str,maxCount) {
@@ -375,7 +434,7 @@ export default class App extends Component {
     writeData(){
         let characteristics = this.getCharacteristics();
         if(characteristics){
-            let data = "{\n" +
+            /*let data = "{\n" +
                 "  \"state\": {\n" +
                 "    \"desired\": {\n" +
                 "      \"settings\": {\n" +
@@ -430,10 +489,26 @@ export default class App extends Component {
                 "  },\n" +
                 "  \"version\": 73112,\n" +
                 "  \"timestamp\": 1501661553\n" +
+                "}";*/
+
+            let data = "{\n" +
+                "\t\"state\": {\n" +
+                "\t\t\"desired\": {\n" +
+                "\t\t\t\"settings\": {\n" +
+                "\t\t\t\t\"schedule\": \"\",\n" +
+                "\t\t\t\t\"node_no\": \"26\",\n" +
+                "\t\t\t\t\"type\": \"switch\",\n" +
+                "\t\t\t\t\"hub_id\": \"b268c6f4-1d2c-4ebc-845e-0a4f4ba6b931\",\n" +
+                "\t\t\t\t\"hold_duration\": 60\n" +
+                "\t\t\t},\n" +
+                "\t\t\t\"thing_name\": \"d80e2211-7194-4e23-97a7-cb2dbfb7263a\",\n" +
+                "\t\t\t\"commands\": {}\n" +
+                "\t\t}\n" +
+                "\t}\n" +
                 "}";
 
 
-            this.dataChunk = this.prepareData(data,20);
+            this.dataChunk = this.prepareData(data,maxPacketSize);
             this.writeIndex = 0;
 
             this.writeDataChunk(characteristics);
@@ -449,7 +524,7 @@ export default class App extends Component {
                 return;
             }
 
-            this.showMessage("Write success-----------------------");
+            this.showMessage("Write success-----------------------"+data.length+"bytes");
             this.showMessage(data);
             if(this.writeIndex<this.dataChunk.length){
                 this.writeDataChunk(characteristics);
